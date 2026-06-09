@@ -32,7 +32,8 @@ describe('createVoiceOutput', () => {
       onstart: (() => void) | null = null
       onend: (() => void) | null = null
       onerror: (() => void) | null = null
-      constructor(public text: string) {}
+      text: string
+      constructor(text: string) { this.text = text }
     })
   })
 
