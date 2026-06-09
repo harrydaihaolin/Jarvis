@@ -30,10 +30,12 @@ export default function App() {
 
   // Camera preview (display only — eye tracker opens its own AVCapture session)
   useEffect(() => {
+    let stream: MediaStream | null = null
     navigator.mediaDevices
       .getUserMedia({ video: true, audio: false })
-      .then(stream => { if (videoRef.current) videoRef.current.srcObject = stream })
+      .then(s => { stream = s; if (videoRef.current) videoRef.current.srcObject = s })
       .catch(() => { /* permission denied — hide silently */ })
+    return () => { stream?.getTracks().forEach(t => t.stop()) }
   }, [])
 
   // Wake word → focus input
@@ -52,10 +54,10 @@ export default function App() {
     return () => dispose?.()
   }, [])
 
-  // AgentConsole tool events → thinking emotion
+  // AgentConsole tool events → thinking emotion (but never interrupt speaking)
   useEffect(() => {
     return openAgentEvents(e => {
-      if (e.type === 'tool_call')   setEmotion('thinking')
+      if (e.type === 'tool_call')   setEmotion(prev => prev === 'speaking' ? prev : 'thinking')
       if (e.type === 'tool_result') setEmotion(prev => prev === 'thinking' ? 'idle' : prev)
     })
   }, [])
@@ -70,10 +72,21 @@ export default function App() {
     try {
       const reply = await chatSession.send(text)
       setEmotion('speaking')
+      // Guard against speechSynthesis silently dropping the utterance (onEnd
+      // never fires): a length-sized watchdog ensures busy/emotion always reset.
+      let finished = false
+      const finish = () => {
+        if (finished) return
+        finished = true
+        setEmotion('idle')
+        setBusy(false)
+      }
+      const watchdogMs = Math.min(60000, 3000 + reply.length * 80)
+      const watchdog = setTimeout(finish, watchdogMs)
       voiceOutput.speak(
         reply,
         () => setEmotion('speaking'),
-        () => { setEmotion('idle'); setBusy(false) },
+        () => { clearTimeout(watchdog); finish() },
       )
     } catch (err) {
       if ((err as Error)?.name !== 'AbortError') {
