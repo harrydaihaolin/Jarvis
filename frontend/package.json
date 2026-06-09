@@ -17,12 +17,16 @@
   "dependencies": {
     "@daily-co/daily-js": "^0.90.0",
     "@daily-co/daily-react": "^0.25.2",
-    "@rolldown/binding-darwin-x64": "1.0.3",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "jotai": "^2.20.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
+  },
+  "optionalDependencies": {
+    "@rolldown/binding-darwin-arm64": "1.0.3",
+    "@rolldown/binding-darwin-x64": "1.0.3",
+    "@rolldown/binding-linux-x64-gnu": "1.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
