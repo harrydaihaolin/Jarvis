@@ -67,14 +67,14 @@ fn load_config() -> Result<Config, String> {
         public_proxy_base_url: var_or("PUBLIC_PROXY_BASE_URL", ""),
         use_hosted: is_true("USE_TAVUS_HOSTED_LLM", false),
         hosted_model: var_or("TAVUS_HOSTED_MODEL", "tavus-claude-haiku-4.5"),
-        persona_name: var_or("PERSONA_NAME", "Claude Agent"),
+        persona_name: var_or("PERSONA_NAME", "Jarvus"),
         system_prompt: var_or(
             "PERSONA_SYSTEM_PROMPT",
-            "You are a capable personal agent with a face and voice, powered by Claude.",
+            "You are Jarvus, a capable personal agent with a face and voice, powered by Claude.",
         ),
         greeting: var_or(
             "PERSONA_GREETING",
-            "Hey — I'm your Claude agent. What do you need?",
+            "Hey — I'm Jarvus. What do you need?",
         ),
         test_mode: is_true("TAVUS_TEST_MODE", true),
     })

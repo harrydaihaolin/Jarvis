@@ -84,17 +84,15 @@
 }
 
 .callRoot {
-  display: flex;
+  position: relative;
   width: 100vw;
   height: 100vh;
   overflow: hidden;
 }
 
 .callMain {
-  position: relative;
-  flex: 1;
-  min-width: 0;
-  height: 100%;
+  position: absolute;
+  inset: 0;
 }
 
 .testBadge {

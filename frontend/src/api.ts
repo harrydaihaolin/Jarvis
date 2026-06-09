@@ -32,3 +32,44 @@ export async function endConversation(conversationId: string): Promise<void> {
   }
   await fetch(`/api/conversation/${conversationId}/end`, { method: 'POST' })
 }
+
+// ── Desktop session sleep (Tauri only; no-ops on web) ─────────────────────────
+
+/** Hand a freshly-created conversation to Rust so it can auto-sleep on inactivity. */
+export async function startSession(
+  conversationId: string,
+  conversationUrl: string,
+): Promise<void> {
+  if (!isTauri()) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  try {
+    await invoke('start_session', { conversationId, conversationUrl })
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Reset the inactivity timer (call on audio/speech activity). */
+export async function resetIdleTimer(): Promise<void> {
+  if (!isTauri()) return
+  const { invoke } = await import('@tauri-apps/api/core')
+  try {
+    await invoke('reset_idle_timer')
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Subscribe to the "Hey Jarvus" wake-word event. Returns a disposer. */
+export async function onWakeWord(cb: () => void): Promise<() => void> {
+  if (!isTauri()) return () => {}
+  const { listen } = await import('@tauri-apps/api/event')
+  return listen('wake-word', () => cb())
+}
+
+/** Subscribe to the session-ended (idle sleep) event. Returns a disposer. */
+export async function onSessionEnded(cb: () => void): Promise<() => void> {
+  if (!isTauri()) return () => {}
+  const { listen } = await import('@tauri-apps/api/event')
+  return listen('session-ended', () => cb())
+}

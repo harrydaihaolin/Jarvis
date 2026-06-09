@@ -48,6 +48,10 @@ const useChatContext = (): ChatContextValue => {
 	return ctx;
 };
 
+// Text at or above this length is treated as a "large paste": abbreviated in the
+// composer (pill) and collapsed in the message history (expand-on-demand).
+const PASTE_THRESHOLD = 500;
+
 export const ChatButton = memo(() => {
 	const { isOpen, toggle } = useChatContext();
 	return (
@@ -85,6 +89,8 @@ ChatButton.displayName = 'ChatButton';
 
 const MessageBubble = memo(({ message }: { message: ChatMessage }) => {
 	const isUser = message.role === 'user';
+	const isLargePaste = isUser && message.text.length >= PASTE_THRESHOLD;
+	const [expanded, setExpanded] = useState(false);
 	return (
 		<li
 			className={`${styles.messageRow} ${isUser ? styles.messageRowUser : styles.messageRowReplica}`}
@@ -101,7 +107,24 @@ const MessageBubble = memo(({ message }: { message: ChatMessage }) => {
 					isUser ? styles.messageBubbleUser : styles.messageBubbleReplica
 				}`}
 			>
-				{message.text}
+				{isLargePaste ? (
+					<span className={styles.pasteMessage}>
+						<span className={styles.pasteMessageMeta}>
+							📋 Pasted text · {message.text.length.toLocaleString()} chars
+						</span>
+						<button
+							type="button"
+							className={styles.pasteMessageToggle}
+							onClick={() => setExpanded((v) => !v)}
+							aria-expanded={expanded}
+						>
+							{expanded ? 'Hide ▴' : 'Show full ▾'}
+						</button>
+						{expanded && <span className={styles.pasteMessageFull}>{message.text}</span>}
+					</span>
+				) : (
+					message.text
+				)}
 			</span>
 		</li>
 	);
@@ -112,6 +135,8 @@ MessageBubble.displayName = 'MessageBubble';
 export const ChatPanel = memo(() => {
 	const { isOpen, close, messages, sendMessage, conversationId } = useChatContext();
 	const [draft, setDraft] = useState('');
+	const [pasteLen, setPasteLen] = useState(0);
+	const pastedRef = useRef<string | null>(null);
 	const listRef = useRef<HTMLUListElement | null>(null);
 
 	useEffect(() => {
@@ -121,14 +146,36 @@ export const ChatPanel = memo(() => {
 		}
 	}, [messages.length]);
 
+	const clearPaste = useCallback(() => {
+		pastedRef.current = null;
+		setPasteLen(0);
+	}, []);
+
+	const onPaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+		const text = e.clipboardData.getData('text');
+		if (text.length >= PASTE_THRESHOLD) {
+			// Abbreviate the paste into a pill instead of flooding the textarea.
+			e.preventDefault();
+			pastedRef.current = text;
+			setPasteLen(text.length);
+		}
+	}, []);
+
 	const submit = useCallback(() => {
-		const trimmed = draft.trim();
-		if (!trimmed || !conversationId) {
+		if (!conversationId) {
 			return;
 		}
-		sendMessage(trimmed);
+		const note = draft.trim();
+		const pasted = pastedRef.current;
+		// Send the full pasted text (no truncation), optionally followed by the note.
+		const toSend = pasted ? (note ? `${pasted}\n\n${note}` : pasted) : note;
+		if (!toSend) {
+			return;
+		}
+		sendMessage(toSend);
 		setDraft('');
-	}, [draft, sendMessage, conversationId]);
+		clearPaste();
+	}, [draft, sendMessage, conversationId, clearPaste]);
 
 	const onKeyDown = useCallback(
 		(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -140,7 +187,7 @@ export const ChatPanel = memo(() => {
 		[submit]
 	);
 
-	const canSend = !!draft.trim() && !!conversationId;
+	const canSend = (!!draft.trim() || pasteLen > 0) && !!conversationId;
 
 	return (
 		<aside
@@ -192,22 +239,45 @@ export const ChatPanel = memo(() => {
 					submit();
 				}}
 			>
-				<textarea
-					className={styles.composerInput}
-					value={draft}
-					onChange={(e) => setDraft(e.target.value)}
-					onKeyDown={onKeyDown}
-					placeholder={conversationId ? 'Type a message…' : 'Connecting…'}
-					disabled={!conversationId}
-					rows={1}
-					aria-label="Message"
-				/>
-				<button
-					type="submit"
-					className={styles.sendButton}
-					disabled={!canSend}
-					aria-label="Send message"
-				>
+				{pasteLen > 0 && (
+					<div className={styles.pastePill}>
+						<span className={styles.pastePillLabel}>
+							📋 Pasted text · {pasteLen.toLocaleString()} chars
+						</span>
+						<button
+							type="button"
+							className={styles.pastePillClose}
+							onClick={clearPaste}
+							aria-label="Remove pasted text"
+						>
+							✕
+						</button>
+					</div>
+				)}
+				<div className={styles.composerRow}>
+					<textarea
+						className={styles.composerInput}
+						value={draft}
+						onChange={(e) => setDraft(e.target.value)}
+						onKeyDown={onKeyDown}
+						onPaste={onPaste}
+						placeholder={
+							conversationId
+								? pasteLen > 0
+									? 'Add a note (optional)…'
+									: 'Type a message…'
+								: 'Connecting…'
+						}
+						disabled={!conversationId}
+						rows={1}
+						aria-label="Message"
+					/>
+					<button
+						type="submit"
+						className={styles.sendButton}
+						disabled={!canSend}
+						aria-label="Send message"
+					>
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
 						width="18"
@@ -225,7 +295,8 @@ export const ChatPanel = memo(() => {
 							strokeLinecap="round"
 						/>
 					</svg>
-				</button>
+					</button>
+				</div>
 			</form>
 		</aside>
 	);

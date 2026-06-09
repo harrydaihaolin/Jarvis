@@ -21,7 +21,17 @@ tauri-build = { version = "2.6.2", features = [] }
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
-tauri = { version = "2.11.2", features = [] }
+tauri = { version = "2.11.2", features = ["tray-icon"] }
 tauri-plugin-log = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 dotenvy = "0.15"
+tokio = { version = "1", features = ["time", "sync"] }
+
+# "Hey Jarvus" wake word (Picovoice Porcupine + CPAL audio). Optional/feature-gated
+# so the default desktop build needs no Picovoice AccessKey or native library;
+# enable with `cargo build --features wake-word` (or `tauri build -- --features wake-word`).
+cpal = { version = "0.15", optional = true }
+pv_porcupine = { version = "3", optional = true }
+
+[features]
+wake-word = ["dep:cpal", "dep:pv_porcupine"]

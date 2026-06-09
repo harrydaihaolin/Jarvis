@@ -1,4 +1,4 @@
-# tavus-agent
+# Jarvus
 
 A real-time **video agent** — not a talking head. A [Tavus CVI](https://docs.tavus.io) replica
 (a photorealistic avatar that sees, hears, and speaks, with built-in STT / TTS / turn-taking) is
@@ -236,5 +236,5 @@ cd frontend && npm run build   # type-check + production build
   (1) build the bundle (`npm run tauri:build`) and run the packaged `.app` rather than `tauri:dev`, so
   the merged `Info.plist` usage strings apply; (2) grant access once by opening `http://localhost:5173`
   in **Safari** and allowing camera/mic, then relaunch the app; (3) check System Settings → Privacy &
-  Security → Camera/Microphone for "Claude Agent". Confirm the same conversation works in a browser
+  Security → Camera/Microphone for "Jarvus". Confirm the same conversation works in a browser
   first to isolate app-permission issues from Tavus/proxy issues.

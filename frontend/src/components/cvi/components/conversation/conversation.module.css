@@ -53,7 +53,8 @@
 	position: absolute;
 	bottom: 1.5rem;
 	left: 0;
-	right: 0;
+	/* Keep the centered control cluster clear of the AgentConsole overlay (380px). */
+	right: 380px;
 	z-index: 20;
 	transition:
 		opacity 0.3s ease,

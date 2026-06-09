@@ -1,8 +1,8 @@
-# tavus-agent — Agent & Contributor Guide
+# Jarvus — Agent & Contributor Guide
 
-A real-time **conversational video agent**: a Tavus CVI replica (video avatar + STT/TTS +
-turn-taking) whose "brain" is the **Anthropic Claude API**, wired in through a custom
-OpenAI-compatible LLM proxy.
+**Jarvus** is a real-time **conversational video agent**: a Tavus CVI replica (video avatar +
+STT/TTS + turn-taking) whose "brain" is the **Anthropic Claude API**, wired in through a custom
+OpenAI-compatible LLM proxy. The Tavus persona is a male stock replica named "Jarvus".
 
 ## Source of truth
 
@@ -63,6 +63,27 @@ frontend/  React + @tavus/cvi-ui  — creates the conversation, renders the call
 - Mutating actions append to `workspace/.agent-audit.log`. The agent loop needs Anthropic credits to
   run live (no Tavus-hosted equivalent — tools execute in our proxy).
 
+## Notion notes
+
+When the user says "take notes in Notion", "save this to Notion", "log this", or similar:
+1. Compose a page title: `YYYY-MM-DD — <topic>` where topic is inferred from the conversation.
+2. Assemble page body from the session: key findings, summaries, citations as text blocks,
+   and any images shown via show_media as external image blocks (URL only, no base64).
+3. Call notion `create_page` with parent={database_id: NOTION_DATABASE_ID}, properties for
+   Name/Date/Topic, and children blocks for the body.
+4. Confirm verbally: "Done — I've saved the notes to Notion."
+
+When the user says "read notes from Notion", "look up [X] in Notion", or "find my notes on [X]":
+1. Call notion `query_database` with a filter on Topic or a text search on Name.
+2. For the matching entry, call notion `retrieve_block_children` to get the page body.
+3. Summarise the content into the conversation.
+
+The Notion MCP server is configured in `.mcp.json` (`notion` → `@notionhq/notion-mcp-server`,
+reads `NOTION_TOKEN`). It is project-scoped, so it must be **approved once** in an interactive
+session. The **Jarvus Notes** database lives under the user's "Jarvus" Notion page; its id is in
+`NOTION_DATABASE_ID`. Schema: `Name` (Title, `YYYY-MM-DD — <topic>`), `Date` (Date, today),
+`Topic` (Select, inferred from context).
+
 ## Two ways to "use Claude" (decided: Option B)
 
 - **Option A — Tavus-hosted Claude:** set `layers.llm.model = "tavus-claude-haiku-4.5"` and omit
@@ -83,6 +104,14 @@ frontend/  React + @tavus/cvi-ui  — creates the conversation, renders the call
   validate without billing, and always call `POST /v2/conversations/{id}/end` when done.
 - Keep the system prompt under ~5,000 tokens for latency/quality.
 - `speculative_inference` defaults to `true` — keep it on for responsiveness.
+
+## CI and the feedback loop
+
+After you push or update a PR, monitor CI check results (`.github/workflows/ci.yml`). Treat
+failing checks as signal to act on, not noise. When CI fails, read the logs, fix the root cause,
+and push follow-up commits. Do not declare the task done while checks are red.
+
+Verify CI status with: `gh pr checks` or check the Actions tab on the PR.
 
 ## Common commands
 

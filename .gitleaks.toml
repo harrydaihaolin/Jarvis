@@ -1,0 +1,8 @@
+title = "tavus-agent gitleaks config"
+
+[allowlist]
+  description = "known safe paths"
+  paths = [
+    ".env.example",
+    "docs/",
+  ]

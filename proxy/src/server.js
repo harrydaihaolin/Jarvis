@@ -74,7 +74,7 @@ function authorize(req, res) {
 app.get("/health", (_req, res) => res.json({ status: "ok", model: ANTHROPIC_MODEL }));
 app.get("/", (_req, res) =>
   res.json({
-    name: "tavus-agent-proxy",
+    name: "jarvus-proxy",
     description: "OpenAI-compatible bridge to the Anthropic Claude API for Tavus CVI.",
     endpoints: ["/v1/chat/completions", "/v1/models", "/health"],
     model: ANTHROPIC_MODEL,

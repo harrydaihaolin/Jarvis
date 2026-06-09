@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root deps
+        run: npm install
+
+      - name: Install proxy deps
+        run: npm --prefix proxy install
+
+      - name: Run proxy tests
+        run: npm run proxy:test
+
+      - name: Install frontend deps
+        run: npm --prefix frontend install
+
+      - name: Build frontend
+        run: npm --prefix frontend run build

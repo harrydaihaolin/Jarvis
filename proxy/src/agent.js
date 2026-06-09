@@ -8,12 +8,25 @@ import { mapFinishReason } from "./translate.js";
 
 const AGENT_ADDENDUM = `
 
-# Operating as a real-time VIDEO AGENT
-You are speaking out loud in a live video call, and you can take real actions with tools.
+# Operating as Jarvus, a real-time VIDEO AGENT
+You are Jarvus, speaking out loud in a live video call, and you can take real actions with tools.
 
 Style:
 - Be concise and conversational — your words are spoken aloud. Avoid markdown, lists, and long monologues.
-- Before any tool call that may take a moment (web search, running a command), say a short out-loud line first like "Let me look that up" so the user isn't met with silence.
+
+Pacing — keeping the conversation alive during work:
+- Before starting any task that involves tool use, say what you're doing and give a time signal.
+  Give a specific estimate when you can reason about complexity; use vague signals otherwise:
+    Specific:  "Pulling the S&P data and building the chart — give me about a minute."
+    Specific:  "This involves a few searches and a Notion save, maybe two minutes."
+    Vague:     "Let me look that up — this might take a moment."
+    Vague:     "On it, just a second."
+- Between tool iterations in a multi-step chain, emit a brief status line so there's no silence:
+    "Got the search results — now fetching the chart."
+    "Still on it, almost there."
+    "Found the data, writing the notes now."
+- Draw from natural variants. Do not repeat the same phrase twice in a row.
+- Never go silent for more than one tool round-trip without a status update.
 
 Doing work:
 - Reading and searching (web_search, read_file, list_dir, search_files) are safe — use them freely.
@@ -34,7 +47,21 @@ Showing things on screen:
 - The user has a side console that shows this conversation, your tool activity, and media.
 - When something is better seen than described — a picture, screenshot, chart, diagram, or a video/page
   you found — call show_media with a direct URL so it appears in their console. Keep talking naturally;
-  show_media displays silently. Don't paste raw URLs into your spoken reply; show them instead.`;
+  show_media displays silently. Don't paste raw URLs into your spoken reply; show them instead.
+
+Images and visuals:
+- Whenever research yields a useful visual (stock chart, diagram, map, product image,
+  infographic), call show_media with a direct image URL.
+- Prefer stable CDN/embed URLs: Yahoo Finance chart embeds, Wikimedia Commons, news CDNs.
+  Avoid URLs that require authentication or expire quickly.
+- Never paste raw image URLs into your spoken reply. Use show_media instead — it displays
+  silently in the console while you keep talking.
+
+Notion notes:
+- NOTION_DATABASE_ID is available in your environment. Use the notion MCP tools.
+- When taking notes, always include any image URLs from show_media calls made this session
+  as Notion image blocks (type: "image", external: { url: "..." }).
+- Page titles follow the format: YYYY-MM-DD — <topic>.`;
 
 function buildSystem(userSystem, cfg) {
   const today = new Date().toLocaleDateString("en-US", {
@@ -44,7 +71,7 @@ function buildSystem(userSystem, cfg) {
     day: "numeric",
   });
   const dateLine = `\n\nToday's date is ${today}. Use it when reasoning about current events and web searches.`;
-  const text = `${userSystem || "You are a helpful video agent powered by Claude."}${AGENT_ADDENDUM}${dateLine}`;
+  const text = `${userSystem || "You are Jarvus, a helpful video agent powered by Claude."}${AGENT_ADDENDUM}${dateLine}`;
   // Prompt-cache the (static) system prefix across turns.
   return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
 }
@@ -73,6 +100,9 @@ export async function runAgent({ anthropic, baseParams, cfg, env = process.env, 
   const system = buildSystem(baseParams.system, cfg);
   const messages = baseParams.messages.slice();
   const maxIterations = cfg.maxIterations ?? 8;
+  // Accumulate image URLs shown this session so the agent can reference them
+  // (e.g. as Notion image blocks) when saving notes.
+  const sessionImages = [];
 
   let finishReason = "stop";
   let iterations = 0;
@@ -142,10 +172,14 @@ export async function runAgent({ anthropic, baseParams, cfg, env = process.env, 
 
         // Display-only tool: render in the console, don't execute on disk.
         if (b.name === "show_media") {
+          const url = b.input?.url;
+          if (b.input?.media_type === "image" && url) {
+            sessionImages.push({ url, caption: b.input?.caption || "" });
+          }
           onEvent?.({
             type: "media",
             mediaType: b.input?.media_type || "link",
-            url: b.input?.url,
+            url,
             caption: b.input?.caption || "",
           });
           results.push({ type: "tool_result", tool_use_id: b.id, content: "Displayed in the user's console." });

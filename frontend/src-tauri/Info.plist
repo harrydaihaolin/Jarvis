@@ -6,8 +6,16 @@
          inside the WKWebView (the Tavus WebRTC video call). Tauri merges this
          into the generated app Info.plist. -->
     <key>NSCameraUsageDescription</key>
-    <string>Claude Agent uses your camera for the live video conversation with the agent.</string>
+    <string>Jarvus uses your camera for the live video conversation with the agent.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Claude Agent uses your microphone so you can talk to the agent.</string>
+    <string>Jarvus uses your microphone so you can talk to the agent and to listen for the "Hey Jarvus" wake word.</string>
+    <!-- Keep the microphone available while backgrounded so the "Hey Jarvus" wake
+         word keeps listening. The app stays in the menu bar (not a hidden agent). -->
+    <key>UIBackgroundModes</key>
+    <array>
+        <string>audio</string>
+    </array>
+    <key>LSBackgroundOnly</key>
+    <false/>
 </dict>
 </plist>
