@@ -60,4 +60,22 @@ describe('createChatSession', () => {
     }
     expect(session.history.length).toBeLessThanOrEqual(40)
   })
+
+  it('removes the user message from history if the request fails', async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error('network down'))
+    const session = createChatSession()
+    await expect(session.send('hello')).rejects.toThrow()
+    expect(session.history).toHaveLength(0)
+  })
+
+  it('keeps history clean across a failed then successful turn', async () => {
+    const session = createChatSession()
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('fail'))
+    await expect(session.send('first')).rejects.toThrow()
+    vi.mocked(fetch).mockResolvedValueOnce(makeStream(sseChunks(['ok'])))
+    await session.send('second')
+    // history should be [user:second, assistant:ok] — no orphaned 'first'
+    expect(session.history).toHaveLength(2)
+    expect(session.history[0]).toEqual({ role: 'user', content: 'second' })
+  })
 })

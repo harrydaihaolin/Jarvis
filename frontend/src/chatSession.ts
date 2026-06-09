@@ -28,42 +28,54 @@ export function createChatSession(): ChatSession {
       controller?.abort()
       controller = new AbortController()
 
-      history.push({ role: 'user', content: text })
+      const userMsg: Message = { role: 'user', content: text }
+      history.push(userMsg)
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (proxyApiKey) headers['Authorization'] = `Bearer ${proxyApiKey}`
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+        if (proxyApiKey) headers['Authorization'] = `Bearer ${proxyApiKey}`
 
-      const res = await fetch(`${proxyUrl}/v1/chat/completions`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers,
-        body: JSON.stringify({ model: 'claude-sonnet-4-6', stream: true, messages: history }),
-      })
+        const res = await fetch(`${proxyUrl}/v1/chat/completions`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers,
+          body: JSON.stringify({ model: 'claude-sonnet-4-6', stream: true, messages: history }),
+        })
 
-      if (!res.ok) throw new Error(`Proxy ${res.status}`)
-      if (!res.body) throw new Error('No body')
+        if (!res.ok) throw new Error(`Proxy ${res.status}`)
+        if (!res.body) throw new Error('No body')
 
-      const reader = res.body.getReader()
-      const dec = new TextDecoder()
-      let assistantText = ''
+        const reader = res.body.getReader()
+        const dec = new TextDecoder()
+        let assistantText = ''
+        let buf = ''
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        for (const line of dec.decode(value).split('\n')) {
-          const data = line.replace(/^data:\s*/, '').trim()
-          if (!data || data === '[DONE]') continue
-          try {
-            const delta = JSON.parse(data).choices?.[0]?.delta?.content
-            if (delta) assistantText += delta
-          } catch { /* ignore */ }
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          buf += dec.decode(value, { stream: true })
+          const lines = buf.split('\n')
+          buf = lines.pop() ?? ''
+          for (const line of lines) {
+            const data = line.replace(/^data:\s*/, '').trim()
+            if (!data || data === '[DONE]') continue
+            try {
+              const delta = JSON.parse(data).choices?.[0]?.delta?.content
+              if (delta) assistantText += delta
+            } catch { /* ignore */ }
+          }
         }
-      }
 
-      history.push({ role: 'assistant', content: assistantText })
-      if (history.length > 40) history.splice(0, history.length - 40)
-      controller = null
-      return assistantText
+        history.push({ role: 'assistant', content: assistantText })
+        if (history.length > 40) history.splice(0, history.length - 40)
+        controller = null
+        return assistantText
+      } catch (err) {
+        const idx = history.indexOf(userMsg)
+        if (idx !== -1) history.splice(idx, 1)
+        controller = null
+        throw err
+      }
     },
   }
 }
