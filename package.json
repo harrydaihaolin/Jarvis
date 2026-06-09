@@ -1,0 +1,17 @@
+{
+  "name": "tavus-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Conversational video agent: a Tavus CVI replica with the Anthropic Claude API as its brain.",
+  "scripts": {
+    "install:all": "npm --prefix proxy install && npm --prefix frontend install",
+    "proxy": "npm --prefix proxy run dev",
+    "proxy:test": "npm --prefix proxy test",
+    "setup": "node scripts/setup-tavus.mjs",
+    "setup:dry": "node scripts/setup-tavus.mjs --dry-run",
+    "frontend": "npm --prefix frontend run dev:all",
+    "tunnel": "node scripts/tunnel.mjs",
+    "tunnel:docker": "docker compose up --build"
+  }
+}

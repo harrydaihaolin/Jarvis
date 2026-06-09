@@ -1,0 +1,277 @@
+.containerWrapper {
+	width: 100%;
+	container-type: inline-size;
+	container-name: conversation;
+}
+
+.container {
+	position: relative;
+	width: 100%;
+	text-align: center;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 9/16;
+	overflow: hidden;
+	border-radius: 0.5rem;
+	max-height: 90vh;
+	background: linear-gradient(135deg, #4b5563 0%, #1f2937 100%);
+	background-size: 400% 400%;
+	animation: gradient 15s ease infinite;
+}
+
+/* Aspect ratio tracks the wrapper's actual width: portrait when narrow
+   (e.g. embedded in a 400px modal), landscape when wide. */
+@container conversation (min-width: 768px) {
+	.container {
+		aspect-ratio: 16/9;
+	}
+}
+
+.errorContainer {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(248, 250, 252, 0.08);
+	color: white;
+	height: 100%;
+	font-size: 1.5rem;
+	font-weight: 600;
+	text-align: center;
+}
+
+.videoContainer {
+	position: relative;
+	z-index: 5;
+	width: 100%;
+	height: 100%;
+}
+
+.footer {
+	position: absolute;
+	bottom: 1.5rem;
+	left: 0;
+	right: 0;
+	z-index: 20;
+	transition:
+		opacity 0.3s ease,
+		transform 0.3s ease;
+}
+
+.footerLeaving {
+	opacity: 0;
+	transform: translateY(20px);
+	pointer-events: none;
+}
+
+.footerControls {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	gap: 16px;
+}
+
+.moreMenu {
+	display: block;
+	position: relative;
+}
+
+.moreButton {
+	position: relative;
+	height: 3rem;
+	width: 3rem;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 9999px;
+	backdrop-filter: blur(4px);
+	background-color: rgba(255, 255, 255, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	color: #000;
+	cursor: pointer;
+}
+
+.moreButtonActive {
+	background-color: white;
+	color: #020617;
+}
+
+.morePopover {
+	position: absolute;
+	bottom: calc(100% + 0.5rem);
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	padding: 0.5rem;
+	border-radius: 1rem;
+	backdrop-filter: blur(16px);
+	background-color: rgba(162, 162, 162, 0.2);
+	z-index: 30;
+}
+
+.leaveButton {
+	background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+	color: white;
+	border: none;
+	font-size: 16px;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	height: 3rem;
+	width: 3rem;
+	border-radius: 9999px;
+	background-color: #ef4444;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.leaveButton:hover {
+	opacity: 0.8;
+}
+
+.leaveButtonIcon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+@container conversation (max-width: 400px) {
+	.footerControls {
+		gap: 8px;
+	}
+	.moreButton,
+	.leaveButton {
+		height: 2.5rem;
+		width: 2.5rem;
+	}
+}
+
+/* ReplicaVideo styles */
+.mainVideoContainer {
+	background: transparent;
+	width: 100%;
+	height: 100%;
+	position: relative;
+}
+
+.mainVideoContainerScreenSharing {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.mainVideo {
+	position: absolute;
+	inset: 0;
+	object-position: center;
+	object-fit: cover !important;
+	height: 100%;
+	width: 100%;
+	transition: all 0.3s ease;
+}
+
+.mainVideoScreenSharing {
+	object-fit: contain !important;
+}
+
+.mainVideoHidden {
+	display: none;
+}
+
+/* PreviewVideo styles */
+.previewVideoContainer {
+	position: relative;
+	background: rgba(2, 6, 23, 0.3);
+	aspect-ratio: 1/1;
+	width: 6rem;
+	border-radius: 0.75rem;
+	overflow: hidden;
+	z-index: 10;
+}
+
+@container conversation (min-width: 768px) {
+	.previewVideoContainer {
+		width: 7rem;
+	}
+}
+
+@container conversation (min-width: 1024px) {
+	.previewVideoContainer {
+		width: 8rem;
+	}
+}
+
+.previewVideoContainerHidden {
+	background: transparent;
+	display: none;
+}
+
+.previewVideo {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.previewVideoHidden {
+	display: none;
+}
+
+/* Main video container */
+.mainVideoContainer {
+	width: 100%;
+	height: 100%;
+}
+
+/* Self view container — pinned to top-right so captions own the bottom band. */
+.selfViewContainer {
+	position: absolute;
+	top: 1rem;
+	left: 1rem;
+	display: flex;
+	align-items: flex-end;
+	flex-direction: column;
+	gap: 0.5rem;
+	z-index: 15;
+}
+
+.selfViewContainer video {
+	object-position: center center;
+	object-fit: cover;
+}
+
+/* Waiting message container */
+/* Start of Selection */
+.waitingContainer {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	color: white;
+	height: 100%;
+	font-size: 1.5rem;
+	font-weight: 600;
+}
+
+@keyframes gradient {
+	0% {
+		background-position: 0% 50%;
+	}
+	50% {
+		background-position: 100% 50%;
+	}
+	100% {
+		background-position: 0% 50%;
+	}
+}
+/* End of Selection */
+
+.audioWaveContainer {
+	position: absolute;
+	bottom: 0.5rem;
+	right: 0.5rem;
+}

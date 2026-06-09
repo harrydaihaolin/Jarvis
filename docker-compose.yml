@@ -1,0 +1,35 @@
+# Dev stack for the Claude "brain": the OpenAI-compatible proxy + an ngrok tunnel
+# that makes it publicly reachable so Tavus's servers can call it as a custom LLM.
+#
+#   docker compose up --build
+#
+# Then run `node scripts/setup-tavus.mjs` (it auto-detects the tunnel on :4040),
+# or just start the frontend, which creates conversations on demand.
+
+services:
+  proxy:
+    build: ./proxy
+    env_file: .env
+    environment:
+      PROXY_PORT: "8787"
+      AGENT_WORKSPACE: "/app/workspace"
+    ports:
+      - "8787:8787"
+    volumes:
+      # Surface the agent's sandboxed files on the host for inspection.
+      - ./workspace:/app/workspace
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    # Tunnel to the proxy service's port 8787 over HTTPS.
+    command: http proxy:8787 --log stdout
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      # ngrok's local inspection API/dashboard. The setup script and frontend
+      # backend read http://localhost:4040/api/tunnels to discover the public URL.
+      - "4040:4040"
+    depends_on:
+      - proxy
+    restart: unless-stopped

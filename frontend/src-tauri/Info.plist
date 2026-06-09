@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required so macOS will prompt for and allow camera/microphone access
+         inside the WKWebView (the Tavus WebRTC video call). Tauri merges this
+         into the generated app Info.plist. -->
+    <key>NSCameraUsageDescription</key>
+    <string>Claude Agent uses your camera for the live video conversation with the agent.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Claude Agent uses your microphone so you can talk to the agent.</string>
+</dict>
+</plist>
