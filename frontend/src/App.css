@@ -10,29 +10,12 @@
   overflow: hidden;
 }
 
-/* Occupy only the area left of the AgentConsole overlay, so the replica
-   video centers within the *visible* region rather than the full viewport. */
+/* Occupy only the area left of the AgentConsole overlay, so the face panel
+   centers within the *visible* region rather than the full viewport. */
 .callMain {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
   right: var(--console-width);
-}
-
-.testBadge {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 10;
-  background: rgba(245, 185, 77, 0.18);
-  border: 1px solid rgba(245, 185, 77, 0.5);
-  color: #f5b94d;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 999px;
-  pointer-events: none;
 }

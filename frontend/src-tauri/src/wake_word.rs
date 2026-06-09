@@ -4,7 +4,7 @@
 // Picovoice Porcupine with the bundled custom keyword (resources/hey-jarvus.ppn),
 // opens the default microphone via CPAL, and feeds 16 kHz mono frames to
 // Porcupine. On detection it emits the Tauri `"wake-word"` event, which the
-// frontend uses to start a Tavus conversation.
+// frontend uses to activate the input and start a turn.
 //
 // Without the feature the listener is a no-op, so the default desktop build needs
 // no Picovoice AccessKey or native Porcupine library.
@@ -12,7 +12,7 @@
 #[cfg(feature = "wake-word")]
 mod engine {
     use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-    use porcupine::PorcupineBuilder;
+    use porcupine::{BuiltinKeywords, PorcupineBuilder};
     use std::sync::mpsc::channel;
     use tauri::path::BaseDirectory;
     use tauri::{AppHandle, Emitter, Manager};
@@ -20,36 +20,44 @@ mod engine {
     pub fn run(app: AppHandle) {
         let access_key = std::env::var("PICOVOICE_ACCESS_KEY").unwrap_or_default();
         if access_key.is_empty() {
-            log::warn!("[wake-word] PICOVOICE_ACCESS_KEY not set — \"Hey Jarvus\" disabled.");
-            return;
-        }
-        let ppn_path = match app.path().resolve("resources/hey-jarvus.ppn", BaseDirectory::Resource) {
-            Ok(p) => p,
-            Err(e) => {
-                log::warn!("[wake-word] could not resolve hey-jarvus.ppn: {e}");
-                return;
-            }
-        };
-        if !ppn_path.exists() {
             log::warn!(
-                "[wake-word] keyword file missing at {:?} — \"Hey Jarvus\" disabled.",
-                ppn_path
+                "[wake-word] PICOVOICE_ACCESS_KEY not set — wake word disabled. \
+                 Get a free key at https://console.picovoice.ai and add it to .env."
             );
             return;
         }
+        // Prefer a custom "Hey Jarvus" keyword if one is bundled; otherwise fall
+        // back to Porcupine's built-in "Jarvis" keyword (no console training, works
+        // with just the AccessKey).
+        let custom_ppn = app
+            .path()
+            .resolve("resources/hey-jarvus.ppn", BaseDirectory::Resource)
+            .ok()
+            .filter(|p| p.exists())
+            .map(|p| p.to_string_lossy().to_string());
 
         std::thread::spawn(move || {
-            let path = ppn_path.to_string_lossy().to_string();
-            if let Err(e) = listen(app, &access_key, &path) {
+            if let Err(e) = listen(app, &access_key, custom_ppn.as_deref()) {
                 log::error!("[wake-word] listener stopped: {e}");
             }
         });
     }
 
-    fn listen(app: AppHandle, access_key: &str, keyword_path: &str) -> Result<(), String> {
-        let porcupine = PorcupineBuilder::new_with_keyword_paths(access_key, &[keyword_path])
-            .init()
-            .map_err(|e| format!("Porcupine init failed: {e:?}"))?;
+    fn listen(app: AppHandle, access_key: &str, custom_ppn: Option<&str>) -> Result<(), String> {
+        let porcupine = match custom_ppn {
+            Some(path) => {
+                log::info!("[wake-word] using custom keyword: {path}");
+                PorcupineBuilder::new_with_keyword_paths(access_key, &[path])
+                    .init()
+                    .map_err(|e| format!("Porcupine init failed: {e:?}"))?
+            }
+            None => {
+                log::info!("[wake-word] no custom keyword bundled — using built-in \"Jarvis\".");
+                PorcupineBuilder::new_with_keywords(access_key, &[BuiltinKeywords::Jarvis])
+                    .init()
+                    .map_err(|e| format!("Porcupine init failed: {e:?}"))?
+            }
+        };
 
         let frame_length = porcupine.frame_length() as usize;
         let required_sr = porcupine.sample_rate();
