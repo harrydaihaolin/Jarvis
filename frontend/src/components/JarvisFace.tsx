@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import './JarvisFace.css'
 
 export type Emotion = 'idle' | 'speaking' | 'thinking' | 'happy' | 'surprised'
@@ -13,28 +13,27 @@ const MAX_EYE_TRAVEL = 7 // px
 export function JarvisFace({ emotion, eyePosition }: Props) {
   const pupilLRef = useRef<HTMLDivElement>(null)
   const pupilRRef = useRef<HTMLDivElement>(null)
-  const eyeLRef = useRef<HTMLDivElement>(null)
-  const eyeRRef = useRef<HTMLDivElement>(null)
   const [blinking, setBlinking] = useState(false)
 
   // Scheduled random blink
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>
-    function schedBlink() {
-      timeoutId = setTimeout(() => {
+    let outer: ReturnType<typeof setTimeout>
+    let inner: ReturnType<typeof setTimeout>
+    function scheduleBlink() {
+      outer = setTimeout(() => {
         setBlinking(true)
-        setTimeout(() => {
+        inner = setTimeout(() => {
           setBlinking(false)
-          schedBlink()
+          scheduleBlink()
         }, 140)
       }, 2600 + Math.random() * 3400)
     }
-    schedBlink()
-    return () => clearTimeout(timeoutId)
+    scheduleBlink()
+    return () => { clearTimeout(outer); clearTimeout(inner) }
   }, [])
 
   // Eye position → pupil translation
-  useEffect(() => {
+  useLayoutEffect(() => {
     const x = eyePosition ? (eyePosition.x - 0.5) * 2 * MAX_EYE_TRAVEL : 0
     const y = eyePosition ? (eyePosition.y - 0.5) * 2 * MAX_EYE_TRAVEL : 0
     for (const ref of [pupilLRef, pupilRRef]) {
@@ -52,11 +51,11 @@ export function JarvisFace({ emotion, eyePosition }: Props) {
       <div className="jf-ring-outer-2" />
       <div className="jf-face">
         <div className="jf-eyes">
-          <div className={eyeClass} ref={eyeLRef}>
+          <div className={eyeClass}>
             <div className="jf-pupil" ref={pupilLRef} />
             <div className="jf-eyelid" />
           </div>
-          <div className={eyeClass} ref={eyeRRef}>
+          <div className={eyeClass}>
             <div className="jf-pupil" ref={pupilRRef} />
             <div className="jf-eyelid" />
           </div>
