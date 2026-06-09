@@ -12,11 +12,11 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:dev:wake": "tauri dev --features wake-word",
+    "tauri:build:wake": "tauri build --features wake-word"
   },
   "dependencies": {
-    "@daily-co/daily-js": "^0.90.0",
-    "@daily-co/daily-react": "^0.25.2",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-shell": "^2.3.5",
     "jotai": "^2.20.0",
