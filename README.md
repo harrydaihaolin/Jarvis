@@ -1,25 +1,46 @@
 # Jarvus
 
-A real-time **video agent** — not a talking head. A [Tavus CVI](https://docs.tavus.io) replica
-(a photorealistic avatar that sees, hears, and speaks, with built-in STT / TTS / turn-taking) is
-the face and voice; **Claude is the brain, and it actually does work**: researches the web, reads
-and writes files in a sandboxed workspace, and (optionally) runs commands — asking for confirmation
-before anything that changes state.
+A desktop AI agent with a face. **Claude is the brain** — it researches the web, reads and writes
+files in a sandboxed workspace, and runs commands with your confirmation. A animated robotic face
+with eye tracking is the interface: say **"Jarvis"** to wake it, type to talk (STT coming), and
+hear it speak back via the system voice while its eyes track your face.
 
-The key trick: Tavus never runs tools itself. By making Claude Tavus's "custom LLM", **the proxy
-*is* the LLM**, so it runs Claude's full tool-use loop server-side and streams back only the spoken
-result. Tavus just sees a very smart streaming model.
+```mermaid
+flowchart TD
+    subgraph Desktop["🖥 Desktop App (Tauri)"]
+        Face["🤖 JarvisFace\nAnimated face · emotions\nblink · mouth waveform"]
+        Input["⌨️ TextInput\nType to talk (v1)\nSTT via wake word later"]
+        Preview["📷 CameraPreview\nYour webcam · small pip"]
+        Console["📋 AgentConsole\nTranscript · tool activity\ncitations · media"]
+        TTS["🔊 SpeechSynthesis\nWeb Speech API\nspeaks Claude's reply"]
+    end
 
-```
-Browser (cam+mic) ──WebRTC──► Tavus CVI ──► perception · turn-taking · STT
-   ▲                              │                                  │
-   │  replica video + voice ◄─── TTS ◄─── LLM layer ◄────────────────┘
-   │                                         │  OpenAI-compatible, streaming (SSE)
-frontend/ (React + @tavus/cvi-ui)            ▼
-                              proxy/ = AGENT RUNTIME
-                              Claude tool-use loop ──► web_search (Anthropic server tool)
-                                                  ├──► files: read/write/edit/search (sandboxed)
-                                                  └──► run_command (opt-in, confirmed)
+    subgraph Native["⚙️ Native (Rust / macOS)"]
+        EyeTrack["👁 EyeTracker\nAVFoundation + Vision\nface position → Tauri event"]
+        WakeWord["🎤 Wake Word\nPicovoice 'Jarvis'\nactivates input"]
+    end
+
+    subgraph Proxy["🧠 Local Proxy  :8787"]
+        Agent["Claude tool-use loop\nagent.js · conversation.js\nheartbeat filler"]
+        SSE["SSE /events\ntranscript · tool steps\ncitations · media"]
+    end
+
+    subgraph Claude["☁️ Anthropic API"]
+        LLM["Claude\nSonnet / Opus"]
+        Search["web_search\nserver tool"]
+    end
+
+    Camera["📹 System camera"] --> EyeTrack
+    EyeTrack -->|"face-position {x,y}"| Face
+    WakeWord -->|"wake-word event"| Input
+    Input -->|"POST /v1/chat/completions"| Agent
+    Agent <-->|"Messages API"| LLM
+    LLM --> Search
+    Agent -->|"streaming text"| TTS
+    TTS -->|"speaking state"| Face
+    Agent --> SSE
+    SSE -->|"EventSource"| Console
+    Preview --- Camera
 ```
 
 | Path | What it does |
