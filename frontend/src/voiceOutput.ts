@@ -57,9 +57,28 @@ const TTS_URL = (import.meta.env.VITE_TTS_URL as string | undefined) ?? 'http://
 
 export function createVoiceOutput(): VoiceOutput {
   let controller: AbortController | null = null
+  let pending: { onStart: () => void; started: boolean } | null = null
 
-  function webSpeechFallback(clean: string, onEnd: () => void) {
+  // Drive the speaking state off the TTS server's real lifecycle: onStart fires
+  // when audio actually starts playing (not optimistically during synthesis).
+  if (typeof EventSource !== 'undefined') {
     try {
+      const es = new EventSource(`${TTS_URL}/events`)
+      es.onmessage = m => {
+        try {
+          const d = JSON.parse(m.data)
+          if (d?.type === 'state' && d.state === 'speaking' && pending && !pending.started) {
+            pending.started = true
+            pending.onStart()
+          }
+        } catch { /* ignore keep-alives */ }
+      }
+    } catch { /* ignore */ }
+  }
+
+  function webSpeechFallback(clean: string, onStart: () => void, onEnd: () => void) {
+    try {
+      onStart()
       const utt = new SpeechSynthesisUtterance(clean)
       const best = pickBestVoice(window.speechSynthesis.getVoices())
       if (best) utt.voice = best
@@ -67,7 +86,7 @@ export function createVoiceOutput(): VoiceOutput {
       utt.onerror = () => onEnd()
       window.speechSynthesis.speak(utt)
     } catch {
-      onEnd()
+      onStart(); onEnd()
     }
   }
 
@@ -75,27 +94,32 @@ export function createVoiceOutput(): VoiceOutput {
     speak(text, onStart, onEnd) {
       const clean = toSpokenText(text)
       if (!clean) { onEnd(); return }
-      onStart()
       controller?.abort()
       controller = new AbortController()
-      // Primary: local Kokoro neural TTS (blocks until playback finishes, so the
-      // response resolving == speech done). Falls back to the system voice if the
-      // TTS server isn't reachable.
+      pending = { onStart, started: false }
+      // Primary: local Kokoro neural TTS. The request blocks until playback
+      // finishes, so resolving == speech done (authoritative end transition).
       fetch(`${TTS_URL}/speak`, {
         method: 'POST',
         signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: clean }),
       })
-        .then(res => { if (!res.ok) throw new Error(`tts ${res.status}`); onEnd() })
+        .then(res => {
+          if (!res.ok) throw new Error(`tts ${res.status}`)
+          pending = null
+          onEnd()
+        })
         .catch(err => {
           if ((err as Error)?.name === 'AbortError') return
-          webSpeechFallback(clean, onEnd)
+          pending = null
+          webSpeechFallback(clean, onStart, onEnd)
         })
     },
     cancel() {
       controller?.abort()
       controller = null
+      pending = null
       fetch(`${TTS_URL}/cancel`, { method: 'POST' }).catch(() => {})
       try { window.speechSynthesis.cancel() } catch { /* ignore */ }
     },

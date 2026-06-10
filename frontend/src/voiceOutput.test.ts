@@ -37,6 +37,7 @@ describe('createVoiceOutput', () => {
     speak: ReturnType<typeof vi.fn>
     getVoices: ReturnType<typeof vi.fn>
   }
+  let lastEventSource: { onmessage: ((e: { data: string }) => void) | null } | null
 
   beforeEach(() => {
     mockSpeechSynthesis = {
@@ -53,19 +54,33 @@ describe('createVoiceOutput', () => {
       text: string
       constructor(text: string) { this.text = text }
     })
+    lastEventSource = null
+    vi.stubGlobal('EventSource', class {
+      onmessage: ((e: { data: string }) => void) | null = null
+      onerror: (() => void) | null = null
+      url: string
+      constructor(url: string) { this.url = url; lastEventSource = this }
+      close() {}
+    })
     vi.stubGlobal('fetch', vi.fn())
   })
 
-  it('posts cleaned text to the Kokoro TTS server and fires onStart + onEnd on success', async () => {
+  it('posts cleaned text; onStart fires on the speaking event, onEnd on success', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response('{"ok":true}', { status: 200 }))
     const vo = createVoiceOutput()
     const onStart = vi.fn()
     const onEnd = vi.fn()
     vo.speak('<emotion value="happy"/> Hello!', onStart, onEnd)
-    expect(onStart).toHaveBeenCalledOnce()
+
     const [url, opts] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit]
     expect(url).toContain('/speak')
     expect(JSON.parse(opts.body as string).text).toBe('Hello!')
+
+    // onStart waits for the server to report it's actually speaking.
+    expect(onStart).not.toHaveBeenCalled()
+    lastEventSource?.onmessage?.({ data: JSON.stringify({ type: 'state', state: 'speaking' }) })
+    expect(onStart).toHaveBeenCalledOnce()
+
     await vi.waitFor(() => expect(onEnd).toHaveBeenCalledOnce())
     expect(mockSpeechSynthesis.speak).not.toHaveBeenCalled()
   })

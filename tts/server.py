@@ -31,6 +31,24 @@ play_proc = None
 play_lock = threading.Lock()
 synth_lock = threading.Lock()
 
+# SSE clients for real TTS lifecycle events (synthesizing / speaking / idle).
+event_clients = []
+event_lock = threading.Lock()
+
+
+def broadcast(state):
+    line = ("data: " + json.dumps({"type": "state", "state": state}) + "\n\n").encode()
+    with event_lock:
+        dead = []
+        for wfile in event_clients:
+            try:
+                wfile.write(line)
+                wfile.flush()
+            except Exception:
+                dead.append(wfile)
+        for wfile in dead:
+            event_clients.remove(wfile)
+
 
 def load_model():
     global kokoro
@@ -51,6 +69,7 @@ def speak(text):
     global play_proc
     while kokoro is None:  # model still loading
         time.sleep(0.1)
+    broadcast("synthesizing")
     with synth_lock:
         samples, sr = kokoro.create(text, voice=VOICE, speed=SPEED, lang="en-us")
     tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
@@ -60,7 +79,9 @@ def speak(text):
     with play_lock:
         proc = subprocess.Popen(["afplay", tmp.name])
         play_proc = proc
+    broadcast("speaking")  # audio is now actually playing
     proc.wait()
+    broadcast("idle")      # playback finished
     try:
         os.unlink(tmp.name)
     except OSError:
@@ -83,8 +104,31 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/health":
             self._send(200, json.dumps({"status": "ok", "ready": kokoro is not None, "voice": VOICE}).encode())
-        else:
-            self._send(404)
+            return
+        if self.path == "/events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            with event_lock:
+                event_clients.append(self.wfile)
+            try:
+                self.wfile.write(b": connected\n\n")
+                self.wfile.flush()
+                while True:
+                    time.sleep(15)
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+            except Exception:
+                pass
+            finally:
+                with event_lock:
+                    if self.wfile in event_clients:
+                        event_clients.remove(self.wfile)
+            return
+        self._send(404)
 
     def do_POST(self):
         n = int(self.headers.get("Content-Length", 0))

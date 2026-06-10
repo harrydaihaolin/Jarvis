@@ -112,14 +112,19 @@ export default function App() {
     }
     try {
       const reply = await chatSession.send(text)
-      setEmotion('speaking')
+      // Stay 'thinking' through synthesis; onStart flips to 'speaking' when audio
+      // actually begins (the TTS server's real lifecycle event).
       let finished = false
       const finish = () => {
         if (finished) return
         finished = true
         turnDone()
       }
-      const watchdogMs = Math.min(60000, 3000 + reply.length * 80)
+      // Kokoro's /speak resolves exactly when playback ends, so onEnd is the
+      // real "done" signal. The watchdog is only a backstop for a hung server —
+      // size it well above any real playback so it never resumes the mic while
+      // Jarvis is still speaking.
+      const watchdogMs = Math.min(180000, 8000 + reply.length * 160)
       const watchdog = setTimeout(finish, watchdogMs)
       voiceOutput.speak(reply, () => setEmotion('speaking'), () => { clearTimeout(watchdog); finish() })
     } catch (err) {
