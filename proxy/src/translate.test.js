@@ -5,6 +5,8 @@ import {
   openaiToAnthropic,
   mapFinishReason,
   streamChunk,
+  cleanSpokenText,
+  lastSpokenUserText,
 } from "./translate.js";
 
 const opts = { defaultModel: "claude-sonnet-4-6", defaultMaxTokens: 1024 };
@@ -62,6 +64,42 @@ test("clamps max_tokens", () => {
 test("mapFinishReason maps anthropic stop reasons", () => {
   assert.equal(mapFinishReason("end_turn"), "stop");
   assert.equal(mapFinishReason("max_tokens"), "length");
+});
+
+test("cleanSpokenText strips a user_audio_analysis prefix, keeping the speech", () => {
+  const raw =
+    "<user_audio_analysis>\nThe speaker sounds bored and slightly annoyed.\n</user_audio_analysis>\nBanana telephone, what is two plus two?";
+  assert.equal(cleanSpokenText(raw), "Banana telephone, what is two plus two?");
+});
+
+test("cleanSpokenText drops pure perception/instruction blocks", () => {
+  assert.equal(
+    cleanSpokenText("<additional_system_instructions><user_appearance>\nAn Asian male in his 30s.\n</user_appearance></additional_system_instructions>"),
+    "",
+  );
+  assert.equal(cleanSpokenText("<additional_system_instructions>respond in english</additional_system_instructions>"), "");
+  assert.equal(cleanSpokenText("<user_emotions>\nappears contemplative\n</user_emotions>"), "");
+});
+
+test("cleanSpokenText removes inline <emotion> tags from assistant text", () => {
+  assert.equal(
+    cleanSpokenText('<emotion value="excited"/> Sure thing.<emotion value="neutral"/> Two plus two is four!'),
+    "Sure thing. Two plus two is four!",
+  );
+});
+
+test("cleanSpokenText passes through plain speech unchanged", () => {
+  assert.equal(cleanSpokenText("Hey, how are you?"), "Hey, how are you?");
+});
+
+test("lastSpokenUserText returns the latest real utterance, skipping perception-only turns", () => {
+  const messages = [
+    { role: "user", content: "Hey, how are you?" },
+    { role: "assistant", content: "Doing great!" },
+    { role: "user", content: "<additional_system_instructions>respond in english</additional_system_instructions>" },
+    { role: "user", content: "<user_audio_analysis>\ndry tone\n</user_audio_analysis>\nSummarize this for me." },
+  ];
+  assert.equal(lastSpokenUserText(messages), "Summarize this for me.");
 });
 
 test("streamChunk has OpenAI chunk shape", () => {

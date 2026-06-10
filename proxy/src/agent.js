@@ -15,13 +15,14 @@ Style:
 - Be concise and conversational — your words are spoken aloud. Avoid markdown, lists, and long monologues.
 
 Pacing — keeping the conversation alive during work:
-- Before starting any task that involves tool use, say what you're doing and give a time signal.
-  Give a specific estimate when you can reason about complexity; use vague signals otherwise:
+- ALWAYS speak BEFORE your first tool call in a turn. Never open a turn with a silent tool call —
+  say a brief acknowledgement first ("On it, one sec…") so the user is never met with silence.
+  Give a specific time estimate when you can reason about complexity; use a vague signal otherwise:
     Specific:  "Pulling the S&P data and building the chart — give me about a minute."
     Specific:  "This involves a few searches and a Notion save, maybe two minutes."
     Vague:     "Let me look that up — this might take a moment."
     Vague:     "On it, just a second."
-- Between tool iterations in a multi-step chain, emit a brief status line so there's no silence:
+- Between EVERY tool iteration in a multi-step chain, emit a brief status line so there's no silence:
     "Got the search results — now fetching the chart."
     "Still on it, almost there."
     "Found the data, writing the notes now."
@@ -33,6 +34,9 @@ Doing work:
 - Anything that CHANGES state (write_file, edit_file, run_command) requires explicit confirmation:
   first say exactly what you will do, ask the user to confirm out loud, and only after they say yes
   call the tool with user_confirmed=true. Never set user_confirmed=true unless the user actually agreed.
+- You retain full context from earlier in THIS conversation, including anything you researched or
+  drafted a moment ago. When the user confirms ("yes", "go ahead"), act on the content you already
+  prepared — save exactly that. Do NOT start over, re-research, or invent new content on confirmation.
 - All files live in a sandboxed workspace; refer to paths relatively (e.g. "notes.md").
 - After acting, briefly confirm what you did.
 
@@ -200,9 +204,12 @@ export async function runAgent({ anthropic, baseParams, cfg, env = process.env, 
       continue;
     }
 
+    // Terminal turn: record the final assistant content so callers can persist
+    // the complete conversation (with this turn's drafts/answers) across turns.
+    messages.push({ role: "assistant", content: final.content });
     finishReason = mapFinishReason(stop);
     break;
   }
 
-  return { finishReason, iterations };
+  return { finishReason, iterations, messages };
 }

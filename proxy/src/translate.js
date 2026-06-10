@@ -20,6 +20,42 @@ export function contentToText(content) {
   return String(content);
 }
 
+// Tavus's raven perception layer injects metadata into the conversation as
+// user-role blocks (<user_appearance>, <user_audio_analysis>, <user_emotions>,
+// <additional_system_instructions>), and the persona prompt makes the model
+// emit <emotion value="..."/> tags. Those belong on the wire to Tavus, but not
+// in the agent console — strip them so the dialog shows only real spoken words.
+const PERCEPTION_PATTERNS = [
+  /<additional_system_instructions>[\s\S]*?<\/additional_system_instructions>/gi,
+  /<user_appearance>[\s\S]*?<\/user_appearance>/gi,
+  /<user_audio_analysis>[\s\S]*?<\/user_audio_analysis>/gi,
+  /<user_emotions>[\s\S]*?<\/user_emotions>/gi,
+  /<emotion\b[^>]*\/?>/gi,
+  /<\/emotion>/gi,
+];
+
+/** Strip Tavus perception/expressiveness metadata, leaving only spoken text. */
+export function cleanSpokenText(raw) {
+  let text = contentToText(raw);
+  for (const re of PERCEPTION_PATTERNS) text = text.replace(re, " ");
+  return text
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** Most recent user message that carries real speech (skips perception-only turns). */
+export function lastSpokenUserText(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (list[i]?.role !== "user") continue;
+    const clean = cleanSpokenText(list[i].content);
+    if (clean) return clean;
+  }
+  return "";
+}
+
 /**
  * Convert an OpenAI Chat Completions request body into Anthropic Messages params.
  * - `system` / `developer` role messages are hoisted into the top-level `system`.

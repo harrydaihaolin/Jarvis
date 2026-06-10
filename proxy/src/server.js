@@ -6,10 +6,12 @@ import dotenv from "dotenv";
 import Anthropic from "@anthropic-ai/sdk";
 import {
   openaiToAnthropic,
-  contentToText,
   streamChunk,
   completionResponse,
+  cleanSpokenText,
+  lastSpokenUserText,
 } from "./translate.js";
+import { resumeOrStart, rememberTurn } from "./conversation.js";
 import { runAgent } from "./agent.js";
 import { buildToolDefs } from "./tools/index.js";
 import { addClient, broadcast, clientCount } from "./events.js";
@@ -46,6 +48,16 @@ if (!ANTHROPIC_API_KEY) {
 
 const DEFAULT_MAX_TOKENS = Number.parseInt(ANTHROPIC_MAX_TOKENS, 10) || 1024;
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+
+// Spoken filler streamed to Tavus when the model goes quiet mid-turn, so the
+// replica never sits in silence while a tool runs or the model is thinking.
+const HEARTBEAT_MS = Number.parseInt(process.env.JARVUS_HEARTBEAT_MS || "4500", 10) || 4500;
+const HEARTBEAT_FILLERS = [
+  "Still on it, one sec.",
+  "Almost there.",
+  "Hang tight, just a moment.",
+  "Still working on that.",
+];
 
 // Agent capabilities (the proxy runs Claude's tool-use loop server-side).
 const agentCfg = {
@@ -134,10 +146,18 @@ async function handleChatCompletions(req, res) {
 
   const model = params.model;
 
-  // Mirror the user's utterance to the agent console.
-  const lastUser = [...(body.messages || [])].reverse().find((m) => m.role === "user");
-  const userText = lastUser ? contentToText(lastUser.content).trim() : "";
+  // Mirror the user's spoken utterance to the agent console — stripping the
+  // Tavus perception metadata (appearance/audio/emotion blocks) so the dialog
+  // shows only real words, not raven's analysis.
+  const userText = lastSpokenUserText(body.messages);
   if (userText) broadcast({ type: "transcript", role: "user", text: userText });
+
+  // Restore this conversation's working memory (tool results + drafts from prior
+  // turns) so the agent never "starts fresh" after a confirm step. Tavus only
+  // carries spoken text forward; we carry the rest. Falls back to the freshly
+  // translated messages for a brand-new conversation.
+  const { messages: runMessages } = resumeOrStart(body.messages, params.messages);
+  params = { ...params, messages: runMessages };
 
   // Forward structured agent steps to the console (and log them).
   const onEvent = (evt) => {
@@ -149,7 +169,7 @@ async function handleChatCompletions(req, res) {
   if (!wantStream) {
     try {
       let text = "";
-      const { finishReason } = await runAgent({
+      const { finishReason, messages } = await runAgent({
         anthropic,
         baseParams: params,
         cfg: agentCfg,
@@ -158,7 +178,9 @@ async function handleChatCompletions(req, res) {
         },
         onEvent,
       });
-      if (text.trim()) broadcast({ type: "transcript", role: "assistant", text: text.trim() });
+      rememberTurn(messages, text);
+      const spokenReply = cleanSpokenText(text);
+      if (spokenReply) broadcast({ type: "transcript", role: "assistant", text: spokenReply });
       return res.json(completionResponse({ id, created, model, text, finishReason }));
     } catch (err) {
       return sendError(res, err);
@@ -180,18 +202,41 @@ async function handleChatCompletions(req, res) {
     send(streamChunk({ id, created, model, delta: { role: "assistant", content: "" } }));
 
     let agentText = "";
-    const { finishReason } = await runAgent({
-      anthropic,
-      baseParams: params,
-      cfg: agentCfg,
-      onText: (delta) => {
-        agentText += delta;
-        send(streamChunk({ id, created, model, delta: { content: delta } }));
-      },
-      onEvent,
-    });
+    // Heartbeat: if the model goes quiet (thinking, or a multi-second web_search
+    // is running) for too long, speak a short filler so the replica never sits
+    // in dead air. Filler is streamed to Tavus only — not added to agentText, so
+    // the console transcript and conversation memory stay clean.
+    let lastActivity = Date.now();
+    let fillerIdx = -1;
+    const heartbeat = setInterval(() => {
+      if (Date.now() - lastActivity < HEARTBEAT_MS) return;
+      fillerIdx = (fillerIdx + 1) % HEARTBEAT_FILLERS.length;
+      const lead = agentText && !/\s$/.test(agentText) ? " " : "";
+      send(streamChunk({ id, created, model, delta: { content: `${lead}${HEARTBEAT_FILLERS[fillerIdx]} ` } }));
+      lastActivity = Date.now();
+    }, 1000);
 
-    if (agentText.trim()) broadcast({ type: "transcript", role: "assistant", text: agentText.trim() });
+    let finishReason;
+    let messages;
+    try {
+      ({ finishReason, messages } = await runAgent({
+        anthropic,
+        baseParams: params,
+        cfg: agentCfg,
+        onText: (delta) => {
+          lastActivity = Date.now();
+          agentText += delta;
+          send(streamChunk({ id, created, model, delta: { content: delta } }));
+        },
+        onEvent,
+      }));
+    } finally {
+      clearInterval(heartbeat);
+    }
+
+    rememberTurn(messages, agentText);
+    const spokenReply = cleanSpokenText(agentText);
+    if (spokenReply) broadcast({ type: "transcript", role: "assistant", text: spokenReply });
     send(streamChunk({ id, created, model, delta: {}, finishReason }));
     res.write("data: [DONE]\n\n");
     res.end();
