@@ -85,6 +85,25 @@ export default function App() {
     } catch { /* ignore */ }
   }, [])
 
+  // Stop Jarvis mid-turn and hand the floor back to the user. Used by the Esc
+  // key, clicking Jarvis, and (when audio is clean) a voice barge-in.
+  const interrupt = useCallback(() => {
+    if (!busyRef.current) return
+    if (DIAG) console.warn('[interrupt]')
+    voiceOutput.cancel()
+    chatSession.abort()
+    setBusy(false); busyRef.current = false
+    setActiveBoth(true); resetIdleTimer()
+    setEmotion('listening')
+  }, [voiceOutput, chatSession, setActiveBoth, resetIdleTimer])
+
+  // Esc key interrupts (reliable on speakers, no echo issues).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') interrupt() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [interrupt])
+
   // Camera preview (display only)
   useEffect(() => {
     let stream: MediaStream | null = null
@@ -197,11 +216,7 @@ export default function App() {
         const echo = isLikelyEcho(txt, spokenWords.current)
         if (shouldBargeIn(busyRef.current, txt) && !echo) {
           if (DIAG) console.warn('[barge-in] interrupting on:', JSON.stringify(txt))
-          voiceOutput.cancel()
-          chatSession.abort()
-          setBusy(false); busyRef.current = false
-          setActiveBoth(true); resetIdleTimer()
-          setEmotion('listening')
+          interrupt()
           setInput(txt)
         } else if (DIAG && txt) {
           console.warn(`[barge-in] ignored (${echo ? 'echo' : 'short'}):`, JSON.stringify(txt))
@@ -242,7 +257,7 @@ export default function App() {
     }).then(d => disposers.push(d))
 
     return () => disposers.forEach(d => d())
-  }, [setActiveBoth, resetIdleTimer, voiceOutput, chatSession, playChime])
+  }, [setActiveBoth, resetIdleTimer, voiceOutput, chatSession, playChime, interrupt])
 
   // AgentConsole tool events → thinking emotion (but never interrupt speaking)
   useEffect(() => {
@@ -262,7 +277,15 @@ export default function App() {
     <div className="callRoot">
       <div className="callMain">
         <div className="jf-panel">
-          <JarvisFace emotion={emotion} eyePosition={eyePos} />
+          <div
+            className="jf-face-click"
+            style={{ cursor: busy ? 'pointer' : 'default' }}
+            onClick={interrupt}
+            title={busy ? 'Click (or press Esc) to interrupt' : undefined}
+          >
+            <JarvisFace emotion={emotion} eyePosition={eyePos} />
+          </div>
+          {busy && <div className="jf-interrupt-hint">talk, click, or press Esc to interrupt</div>}
           <div className="jf-bottom-bar">
             <video ref={videoRef} autoPlay muted playsInline className="jf-cam-preview" />
             <input

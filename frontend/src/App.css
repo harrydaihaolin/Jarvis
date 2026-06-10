@@ -110,3 +110,9 @@
   max-width: 520px;
   line-height: 1.4;
 }
+
+.jf-interrupt-hint {
+  font-size: 0.72rem;
+  color: #555;
+  letter-spacing: 0.04em;
+}
