@@ -1,7 +1,8 @@
 export interface Message { role: 'user' | 'assistant'; content: string }
 
 export interface ChatSession {
-  send(text: string): Promise<string>
+  /** Send a turn. `onDelta` receives streamed text chunks as they arrive. */
+  send(text: string, onDelta?: (delta: string) => void): Promise<string>
   abort(): void
   history: Message[]
 }
@@ -18,7 +19,7 @@ export function createChatSession(): ChatSession {
       controller = null
     },
 
-    async send(text) {
+    async send(text, onDelta) {
       // Read config lazily so test stubs of import.meta.env apply, and so
       // Vite doesn't statically inline the values at module-load time.
       const env = import.meta.env as Record<string, string | undefined>
@@ -61,7 +62,7 @@ export function createChatSession(): ChatSession {
             if (!data || data === '[DONE]') continue
             try {
               const delta = JSON.parse(data).choices?.[0]?.delta?.content
-              if (delta) assistantText += delta
+              if (delta) { assistantText += delta; onDelta?.(delta) }
             } catch { /* ignore */ }
           }
         }

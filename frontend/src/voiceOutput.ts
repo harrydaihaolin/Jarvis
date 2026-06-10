@@ -27,8 +27,16 @@ export function toSpokenText(raw: string): string {
   return t.replace(/\s+/g, ' ').trim()
 }
 
+export interface SpeechStream {
+  push(text: string): void
+  done(): void
+}
+
 export interface VoiceOutput {
+  /** Speak a single block (convenience: one chunk then done). */
   speak(text: string, onStart: () => void, onEnd: () => void): void
+  /** Stream speech: push sentences as they arrive, call done() when the source ends. */
+  speakStream(onStart: () => void, onDone: () => void): SpeechStream
   cancel(): void
 }
 
@@ -56,70 +64,110 @@ export function pickBestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVo
 const TTS_URL = (import.meta.env.VITE_TTS_URL as string | undefined) ?? 'http://localhost:8788'
 
 export function createVoiceOutput(): VoiceOutput {
-  let controller: AbortController | null = null
-  let pending: { onStart: () => void; started: boolean } | null = null
+  let queue: string[] = []
+  let playing = false
+  let ended = false
+  let started = false
+  let onStartCb: (() => void) | null = null
+  let onDoneCb: (() => void) | null = null
+  let abort: AbortController | null = null
 
-  // Drive the speaking state off the TTS server's real lifecycle: onStart fires
-  // when audio actually starts playing (not optimistically during synthesis).
+  // onStart fires when audio actually begins (the server's real 'speaking' event),
+  // not optimistically during synthesis.
   if (typeof EventSource !== 'undefined') {
     try {
       const es = new EventSource(`${TTS_URL}/events`)
       es.onmessage = m => {
         try {
           const d = JSON.parse(m.data)
-          if (d?.type === 'state' && d.state === 'speaking' && pending && !pending.started) {
-            pending.started = true
-            pending.onStart()
+          if (d?.type === 'state' && d.state === 'speaking' && onStartCb && !started) {
+            started = true
+            onStartCb()
           }
         } catch { /* ignore keep-alives */ }
       }
     } catch { /* ignore */ }
   }
 
-  function webSpeechFallback(clean: string, onStart: () => void, onEnd: () => void) {
-    try {
-      onStart()
-      const utt = new SpeechSynthesisUtterance(clean)
-      const best = pickBestVoice(window.speechSynthesis.getVoices())
-      if (best) utt.voice = best
-      utt.onend = () => onEnd()
-      utt.onerror = () => onEnd()
-      window.speechSynthesis.speak(utt)
-    } catch {
-      onStart(); onEnd()
+  function fireStart() {
+    if (onStartCb && !started) { started = true; onStartCb() }
+  }
+
+  function webSpeechChunk(text: string): Promise<void> {
+    return new Promise(resolve => {
+      try {
+        fireStart()
+        const utt = new SpeechSynthesisUtterance(text)
+        const best = pickBestVoice(window.speechSynthesis.getVoices())
+        if (best) utt.voice = best
+        utt.onend = () => resolve()
+        utt.onerror = () => resolve()
+        window.speechSynthesis.speak(utt)
+      } catch {
+        resolve()
+      }
+    })
+  }
+
+  async function pump() {
+    if (playing) return
+    playing = true
+    while (queue.length) {
+      const text = queue.shift() as string
+      abort = new AbortController()
+      try {
+        // Kokoro: the request blocks until this chunk finishes playing.
+        const res = await fetch(`${TTS_URL}/speak`, {
+          method: 'POST',
+          signal: abort.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+        if (!res.ok) throw new Error(`tts ${res.status}`)
+      } catch (err) {
+        if ((err as Error)?.name === 'AbortError') { playing = false; return }
+        await webSpeechChunk(text) // server unreachable → system voice
+      }
+    }
+    playing = false
+    if (ended) {
+      const cb = onDoneCb
+      onStartCb = null
+      onDoneCb = null
+      cb?.()
+    }
+  }
+
+  function speakStream(onStart: () => void, onDone: () => void): SpeechStream {
+    queue = []
+    started = false
+    ended = false
+    onStartCb = onStart
+    onDoneCb = onDone
+    return {
+      push(text: string) {
+        const t = (text || '').trim()
+        if (t) { queue.push(t); void pump() }
+      },
+      done() { ended = true; void pump() },
     }
   }
 
   return {
+    speakStream,
     speak(text, onStart, onEnd) {
+      const stream = speakStream(onStart, onEnd)
       const clean = toSpokenText(text)
-      if (!clean) { onEnd(); return }
-      controller?.abort()
-      controller = new AbortController()
-      pending = { onStart, started: false }
-      // Primary: local Kokoro neural TTS. The request blocks until playback
-      // finishes, so resolving == speech done (authoritative end transition).
-      fetch(`${TTS_URL}/speak`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: clean }),
-      })
-        .then(res => {
-          if (!res.ok) throw new Error(`tts ${res.status}`)
-          pending = null
-          onEnd()
-        })
-        .catch(err => {
-          if ((err as Error)?.name === 'AbortError') return
-          pending = null
-          webSpeechFallback(clean, onStart, onEnd)
-        })
+      if (clean) stream.push(clean)
+      stream.done()
     },
     cancel() {
-      controller?.abort()
-      controller = null
-      pending = null
+      queue = []
+      ended = true
+      started = false
+      onStartCb = null
+      onDoneCb = null
+      abort?.abort()
       fetch(`${TTS_URL}/cancel`, { method: 'POST' }).catch(() => {})
       try { window.speechSynthesis.cancel() } catch { /* ignore */ }
     },

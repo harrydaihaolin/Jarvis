@@ -5,6 +5,7 @@ import { JarvisFace, type Emotion } from './components/JarvisFace'
 import { AgentConsole } from './AgentConsole'
 import { createVoiceOutput } from './voiceOutput'
 import { createChatSession } from './chatSession'
+import { createSpeechChunker } from './speechChunker'
 import { openAgentEvents } from './agentEvents'
 import './App.css'
 
@@ -110,25 +111,30 @@ export default function App() {
       if (activeRef.current) { resetIdleTimer(); playChime() } // your turn
       setEmotion('idle')
     }
+    // Stream the reply into speech sentence-by-sentence so the agent's opening
+    // pacing line ("On it, one sec…") is spoken immediately while it works, and
+    // the voice keeps pace with the text instead of waiting for the whole answer.
+    let finished = false
+    let watchdog: ReturnType<typeof setTimeout>
+    const finish = () => {
+      if (finished) return
+      finished = true
+      clearTimeout(watchdog)
+      turnDone()
+    }
+    // Backstop only — the real end is the voice stream draining (onDone below).
+    watchdog = setTimeout(finish, 180000)
+    const chunker = createSpeechChunker()
+    const stream = voiceOutput.speakStream(() => setEmotion('speaking'), () => finish())
     try {
-      const reply = await chatSession.send(text)
-      // Stay 'thinking' through synthesis; onStart flips to 'speaking' when audio
-      // actually begins (the TTS server's real lifecycle event).
-      let finished = false
-      const finish = () => {
-        if (finished) return
-        finished = true
-        turnDone()
-      }
-      // Kokoro's /speak resolves exactly when playback ends, so onEnd is the
-      // real "done" signal. The watchdog is only a backstop for a hung server —
-      // size it well above any real playback so it never resumes the mic while
-      // Jarvis is still speaking.
-      const watchdogMs = Math.min(180000, 8000 + reply.length * 160)
-      const watchdog = setTimeout(finish, watchdogMs)
-      voiceOutput.speak(reply, () => setEmotion('speaking'), () => { clearTimeout(watchdog); finish() })
+      await chatSession.send(text, delta => {
+        for (const sentence of chunker.push(delta)) stream.push(sentence)
+      })
+      for (const sentence of chunker.flush()) stream.push(sentence)
+      stream.done()
     } catch (err) {
-      if ((err as Error)?.name !== 'AbortError') turnDone()
+      clearTimeout(watchdog)
+      if ((err as Error)?.name !== 'AbortError') { voiceOutput.cancel(); turnDone() }
     }
   }, [chatSession, voiceOutput, resetIdleTimer, playChime])
 
