@@ -53,36 +53,46 @@ describe('createVoiceOutput', () => {
       text: string
       constructor(text: string) { this.text = text }
     })
+    vi.stubGlobal('fetch', vi.fn())
   })
 
-  it('calls speechSynthesis.speak with cleaned text', () => {
+  it('posts cleaned text to the Kokoro TTS server and fires onStart + onEnd on success', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response('{"ok":true}', { status: 200 }))
     const vo = createVoiceOutput()
-    vo.speak('<emotion value="happy"/> Hello!', () => {}, () => {})
-    expect(mockSpeechSynthesis.speak).toHaveBeenCalledOnce()
-    const utt = mockSpeechSynthesis.speak.mock.calls[0][0]
-    expect(utt.text).toBe('Hello!')
-  })
-
-  it('calls onEnd when utterance ends', () => {
-    const vo = createVoiceOutput()
+    const onStart = vi.fn()
     const onEnd = vi.fn()
-    vo.speak('Hello', () => {}, onEnd)
-    const utt = mockSpeechSynthesis.speak.mock.calls[0][0]
-    utt.onend()
-    expect(onEnd).toHaveBeenCalledOnce()
+    vo.speak('<emotion value="happy"/> Hello!', onStart, onEnd)
+    expect(onStart).toHaveBeenCalledOnce()
+    const [url, opts] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit]
+    expect(url).toContain('/speak')
+    expect(JSON.parse(opts.body as string).text).toBe('Hello!')
+    await vi.waitFor(() => expect(onEnd).toHaveBeenCalledOnce())
+    expect(mockSpeechSynthesis.speak).not.toHaveBeenCalled()
   })
 
-  it('skips speaking empty text and calls onEnd immediately', () => {
+  it('falls back to speechSynthesis when the TTS server is unreachable', async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error('connection refused'))
+    const vo = createVoiceOutput()
+    vo.speak('Hello', () => {}, () => {})
+    await vi.waitFor(() => expect(mockSpeechSynthesis.speak).toHaveBeenCalledOnce())
+    const utt = mockSpeechSynthesis.speak.mock.calls[0][0]
+    expect(utt.text).toBe('Hello')
+  })
+
+  it('skips empty text and calls onEnd immediately without any request', () => {
     const vo = createVoiceOutput()
     const onEnd = vi.fn()
     vo.speak('<emotion value="x"/>', () => {}, onEnd)
-    expect(mockSpeechSynthesis.speak).not.toHaveBeenCalled()
+    expect(fetch).not.toHaveBeenCalled()
     expect(onEnd).toHaveBeenCalledOnce()
   })
 
-  it('cancel calls speechSynthesis.cancel', () => {
+  it('cancel posts /cancel and stops any system-voice fallback', () => {
+    vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 200 }))
     const vo = createVoiceOutput()
     vo.cancel()
+    const urls = vi.mocked(fetch).mock.calls.map(c => String(c[0]))
+    expect(urls.some(u => u.includes('/cancel'))).toBe(true)
     expect(mockSpeechSynthesis.cancel).toHaveBeenCalledOnce()
   })
 })

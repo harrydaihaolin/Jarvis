@@ -28,6 +28,10 @@ final class STT: NSObject {
     private var active = false   // host wants us listening (start..stop)
     private var paused = false   // temporarily suspended (during TTS)
     private var running = false  // a recognition session is currently live
+    // Hardware echo cancellation (lets the user barge in). Off unless JARVUS_AEC=1
+    // — it's a finicky duplex audio unit, so it's opt-in and validated separately.
+    private let useAEC = ProcessInfo.processInfo.environment["JARVUS_AEC"] == "1"
+    private var aecConfigured = false
 
     func emit(_ obj: [String: String]) {
         if let data = try? JSONSerialization.data(withJSONObject: obj),
@@ -69,7 +73,23 @@ final class STT: NSObject {
         lastText = ""
 
         let input = engine.inputNode
+        if useAEC {
+            if !aecConfigured {
+                do {
+                    try input.setVoiceProcessingEnabled(true)
+                    aecConfigured = true
+                    fputs("[stt] AEC: enabled\n", stderr)
+                } catch {
+                    fputs("[stt] AEC: failed (\(error)) — continuing without\n", stderr)
+                }
+            }
+            // The voice-processing I/O unit is duplex: it only renders input audio
+            // if the output chain is also engaged. Touching mainMixerNode creates
+            // the (silent) mainMixer→output connection so the unit runs.
+            _ = engine.mainMixerNode
+        }
         let format = input.outputFormat(forBus: 0)
+        fputs("[stt] capture format: \(format.sampleRate)Hz \(format.channelCount)ch\n", stderr)
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
             self?.request?.append(buffer)

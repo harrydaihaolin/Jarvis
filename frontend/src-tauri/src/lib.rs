@@ -71,7 +71,7 @@ pub fn run() {
     .invoke_handler({
       #[cfg(feature = "voice-input")]
       {
-        tauri::generate_handler![stt::stt_start, stt::stt_stop]
+        tauri::generate_handler![stt::stt_start, stt::stt_stop, stt::stt_pause, stt::stt_resume]
       }
       #[cfg(not(feature = "voice-input"))]
       {
