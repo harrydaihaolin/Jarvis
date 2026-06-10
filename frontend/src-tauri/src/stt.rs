@@ -74,7 +74,7 @@ pub fn spawn_stt(app: AppHandle) {
                     }
                 }
                 CommandEvent::Stderr(bytes) => {
-                    log::debug!("[stt] sidecar stderr: {}", String::from_utf8_lossy(&bytes).trim());
+                    log::info!("[stt] sidecar: {}", String::from_utf8_lossy(&bytes).trim());
                 }
                 _ => {}
             }

@@ -40,7 +40,8 @@ export function createChatSession(): ChatSession {
           method: 'POST',
           signal: controller.signal,
           headers,
-          body: JSON.stringify({ model: 'claude-sonnet-4-6', stream: true, messages: history }),
+          // Model is chosen by the proxy via ANTHROPIC_MODEL in .env.
+          body: JSON.stringify({ stream: true, messages: history }),
         })
 
         if (!res.ok) throw new Error(`Proxy ${res.status}`)

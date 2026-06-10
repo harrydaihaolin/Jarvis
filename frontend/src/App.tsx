@@ -6,6 +6,11 @@ import { AgentConsole } from './AgentConsole'
 import { createVoiceOutput } from './voiceOutput'
 import { createChatSession } from './chatSession'
 import { createSpeechChunker } from './speechChunker'
+import { shouldBargeIn, isLikelyEcho, wordsOf } from './bargeIn'
+
+// Diagnosis mode: log the voice pipeline (barge-in, finals) to the dev console.
+// On by default; set VITE_DIAGNOSTICS=0 to silence.
+const DIAG = (import.meta.env.VITE_DIAGNOSTICS ?? '1') !== '0'
 import { openAgentEvents } from './agentEvents'
 import './App.css'
 
@@ -44,6 +49,8 @@ export default function App() {
   const activeRef = useRef(false)
   const micEnabledRef = useRef(true)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Words Jarvis is currently speaking — used to reject mic echo (no AEC).
+  const spokenWords = useRef<Set<string>>(new Set())
 
   const voiceOutput = useMemo(() => createVoiceOutput(), [])
   const chatSession = useMemo(() => createChatSession(), [])
@@ -99,15 +106,14 @@ export default function App() {
     setBusy(true); busyRef.current = true
     setEmotion('thinking')
     voiceOutput.cancel()
+    spokenWords.current = new Set()
     // Don't let the conversation idle-timeout fire mid-turn (a web search can
     // take longer than the timeout).
     if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null }
-    void tauriInvoke('stt_pause') // echo guard: stop hearing while we think + speak
+    // Mic stays LIVE through the turn (hardware echo cancellation keeps Jarvis
+    // from hearing himself) so the user can interrupt at any time.
     const turnDone = () => {
       setBusy(false); busyRef.current = false
-      // ALWAYS re-arm the listener (even if we dropped to idle) so "Hey Jarvis"
-      // keeps working — the mic is only paused *during* a turn.
-      if (micEnabledRef.current) void tauriInvoke('stt_resume')
       if (activeRef.current) { resetIdleTimer(); playChime() } // your turn
       setEmotion('idle')
     }
@@ -127,10 +133,14 @@ export default function App() {
     const chunker = createSpeechChunker()
     const stream = voiceOutput.speakStream(() => setEmotion('speaking'), () => finish())
     try {
+      const speak = (sentence: string) => {
+        for (const w of wordsOf(sentence)) spokenWords.current.add(w)
+        stream.push(sentence)
+      }
       await chatSession.send(text, delta => {
-        for (const sentence of chunker.push(delta)) stream.push(sentence)
+        for (const sentence of chunker.push(delta)) speak(sentence)
       })
-      for (const sentence of chunker.flush()) stream.push(sentence)
+      for (const sentence of chunker.flush()) speak(sentence)
       stream.done()
     } catch (err) {
       clearTimeout(watchdog)
@@ -182,15 +192,19 @@ export default function App() {
     tauriListen<string>('stt-partial', t => {
       const txt = (t || '').trim()
       if (busyRef.current) {
-        // Barge-in: the user is speaking while Jarvis thinks/talks → stop and listen.
-        // Threshold filters any residual echo the AEC didn't fully remove.
-        if (txt.length >= 3) {
+        // Barge-in: the user is speaking while Jarvis thinks/talks → stop and
+        // listen. Ignore echo of Jarvis's own voice (no hardware AEC).
+        const echo = isLikelyEcho(txt, spokenWords.current)
+        if (shouldBargeIn(busyRef.current, txt) && !echo) {
+          if (DIAG) console.warn('[barge-in] interrupting on:', JSON.stringify(txt))
           voiceOutput.cancel()
           chatSession.abort()
           setBusy(false); busyRef.current = false
           setActiveBoth(true); resetIdleTimer()
           setEmotion('listening')
           setInput(txt)
+        } else if (DIAG && txt) {
+          console.warn(`[barge-in] ignored (${echo ? 'echo' : 'short'}):`, JSON.stringify(txt))
         }
         return
       }
@@ -200,6 +214,7 @@ export default function App() {
     tauriListen<string>('stt-final', raw => {
       const text = (raw || '').trim()
       if (!text) return
+      if (DIAG) console.warn('[stt-final]', JSON.stringify(text), 'busy=', busyRef.current, 'active=', activeRef.current)
       if (activeRef.current) {
         void sendTextRef.current(text)
         return
