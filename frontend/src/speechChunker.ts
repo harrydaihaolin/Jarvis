@@ -1,4 +1,4 @@
-import { stripEmotionTags } from './voiceOutput'
+import { stripEmotionTags, stripMarkdown } from './voiceOutput'
 
 const SCREEN_NOTE = 'I’ve put that on the screen.'
 
@@ -21,7 +21,7 @@ export function createSpeechChunker() {
   const SENT = /[.!?]+(?=\s|["'A-Z])|\n/
 
   function clean(s: string): string {
-    return stripEmotionTags(s).trim()
+    return stripMarkdown(stripEmotionTags(s)).trim()
   }
 
   function drain(final: boolean): string[] {

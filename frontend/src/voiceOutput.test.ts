@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createVoiceOutput, stripEmotionTags, toSpokenText } from './voiceOutput'
+import { createVoiceOutput, stripEmotionTags, stripMarkdown, toSpokenText } from './voiceOutput'
+
+describe('stripMarkdown', () => {
+  it('removes bold/italic/code markers but keeps the words', () => {
+    expect(stripMarkdown('Here is **bold** and *italic* and `code`.')).toBe('Here is bold and italic and code.')
+  })
+  it('strips headers, bullets and links', () => {
+    expect(stripMarkdown('# Title\n- first item\n[Anthropic](https://x.com)')).toBe('Title\nfirst item\nAnthropic')
+  })
+})
 
 describe('stripEmotionTags', () => {
   it('removes <emotion value="x"/> tags', () => {

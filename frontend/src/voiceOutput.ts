@@ -6,6 +6,18 @@ export function stripEmotionTags(text: string): string {
     .trim()
 }
 
+/** Strip markdown so the voice doesn't read "**", "`", "#" etc. out loud. */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')        // [text](url) → text
+    .replace(/^\s{0,3}#{1,6}\s+/gm, '')             // # headers
+    .replace(/^\s*[-*+•]\s+/gm, '')                 // bullet markers
+    .replace(/^\s*>\s?/gm, '')                      // blockquotes
+    .replace(/\*\*\*|\*\*|\*|___|__|~~|`/g, '')      // bold/italic/strike/code markers
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
 const SPEAK_MAX = 600 // chars before we summarize aloud (full text stays in the console)
 
 /**
@@ -17,6 +29,7 @@ export function toSpokenText(raw: string): string {
   let t = stripEmotionTags(raw)
   // Never read fenced code/content blocks aloud.
   t = t.replace(/```[\s\S]*?```/g, ' — I’ve put that on the screen. ')
+  t = stripMarkdown(t)
   // Long replies: speak the lead-in up to a sentence boundary, then defer.
   if (t.length > SPEAK_MAX) {
     const head = t.slice(0, SPEAK_MAX)

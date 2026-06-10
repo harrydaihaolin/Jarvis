@@ -22,6 +22,11 @@ describe('createSpeechChunker', () => {
     expect(c.push('<emotion value="happy"/> Sure thing! ')).toEqual(['Sure thing!'])
   })
 
+  it('strips markdown so it is not read aloud as symbols', () => {
+    const c = createSpeechChunker()
+    expect(c.push('Here is **really** important stuff. ')).toEqual(['Here is really important stuff.'])
+  })
+
   it('does not read fenced code aloud, emits a screen note instead', () => {
     const c = createSpeechChunker()
     const out = [
