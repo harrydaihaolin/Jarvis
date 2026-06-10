@@ -3,13 +3,23 @@ mod wake_word;
 #[cfg(feature = "eye-tracking")]
 mod eye_tracker;
 
+#[cfg(feature = "voice-input")]
+mod stt;
+
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::{Manager, WindowEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
+  let mut builder = tauri::Builder::default();
+
+  #[cfg(feature = "voice-input")]
+  {
+    builder = builder.manage(stt::SttState::default());
+  }
+
+  builder
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -18,6 +28,9 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      #[cfg(feature = "voice-input")]
+      app.handle().plugin(tauri_plugin_shell::init())?;
 
       let open = MenuItemBuilder::with_id("open", "Open Jarvus").build(app)?;
       let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -44,6 +57,9 @@ pub fn run() {
       #[cfg(feature = "eye-tracking")]
       eye_tracker::spawn_eye_tracker(app.handle().clone());
 
+      #[cfg(feature = "voice-input")]
+      stt::spawn_stt(app.handle().clone());
+
       Ok(())
     })
     .on_window_event(|window, event| {
@@ -52,7 +68,16 @@ pub fn run() {
         api.prevent_close();
       }
     })
-    .invoke_handler(tauri::generate_handler![])
+    .invoke_handler({
+      #[cfg(feature = "voice-input")]
+      {
+        tauri::generate_handler![stt::stt_start, stt::stt_stop]
+      }
+      #[cfg(not(feature = "voice-input"))]
+      {
+        tauri::generate_handler![]
+      }
+    })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

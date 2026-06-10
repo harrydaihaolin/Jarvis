@@ -13,6 +13,8 @@
     "tauri:build": "tauri build",
     "tauri:dev:wake": "tauri dev --features wake-word",
     "tauri:build:wake": "tauri build --features wake-word",
+    "tauri:dev:voice": "tauri dev --features wake-word,voice-input",
+    "tauri:build:voice": "tauri build --features wake-word,voice-input",
     "test": "vitest run"
   },
   "dependencies": {

@@ -37,5 +37,9 @@ tokio = { version = "1", features = ["time", "sync"] }
 cpal = { version = "0.15", optional = true }
 pv_porcupine = { path = "vendor/pv_porcupine-3.0.0", optional = true }
 
+# Voice input: macOS Speech sidecar driven over stdio via tauri-plugin-shell.
+tauri-plugin-shell = { version = "2", optional = true }
+
 [features]
 wake-word = ["dep:cpal", "dep:pv_porcupine"]
+voice-input = ["dep:tauri-plugin-shell"]

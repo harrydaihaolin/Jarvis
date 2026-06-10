@@ -9,6 +9,8 @@
     <string>Jarvus uses your camera for the live video conversation with the agent.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Jarvus uses your microphone so you can talk to the agent and to listen for the "Hey Jarvus" wake word.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Jarvus uses speech recognition so you can talk to it instead of typing.</string>
     <!-- Keep the microphone available while backgrounded so the "Hey Jarvus" wake
          word keeps listening. The app stays in the menu bar (not a hidden agent). -->
     <key>UIBackgroundModes</key>
