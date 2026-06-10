@@ -64,92 +64,88 @@ export function pickBestVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVo
 const TTS_URL = (import.meta.env.VITE_TTS_URL as string | undefined) ?? 'http://localhost:8788'
 
 export function createVoiceOutput(): VoiceOutput {
-  let queue: string[] = []
-  let playing = false
-  let ended = false
-  let started = false
   let onStartCb: (() => void) | null = null
   let onDoneCb: (() => void) | null = null
-  let abort: AbortController | null = null
+  let started = false
+  let settled = false
+  let fallback = false
+  let buffer = '' // accumulated text, used only for the system-voice fallback
+  let chain: Promise<void> = Promise.resolve()
 
-  // onStart fires when audio actually begins (the server's real 'speaking' event),
-  // not optimistically during synthesis.
+  // The server pipelines synthesis (synth-ahead) and plays sentences gaplessly;
+  // we just enqueue them in order and listen for its real lifecycle: 'speaking'
+  // (first audio) → onStart, 'idle' (all playback done) → onDone.
   if (typeof EventSource !== 'undefined') {
     try {
       const es = new EventSource(`${TTS_URL}/events`)
       es.onmessage = m => {
         try {
           const d = JSON.parse(m.data)
-          if (d?.type === 'state' && d.state === 'speaking' && onStartCb && !started) {
-            started = true
-            onStartCb()
-          }
+          if (d?.type !== 'state') return
+          if (d.state === 'speaking' && onStartCb && !started) { started = true; onStartCb() }
+          if (d.state === 'idle' && !fallback) settle()
         } catch { /* ignore keep-alives */ }
       }
     } catch { /* ignore */ }
   }
 
-  function fireStart() {
-    if (onStartCb && !started) { started = true; onStartCb() }
+  function settle() {
+    if (settled) return
+    settled = true
+    const cb = onDoneCb
+    onStartCb = null
+    onDoneCb = null
+    cb?.()
   }
 
-  function webSpeechChunk(text: string): Promise<void> {
-    return new Promise(resolve => {
-      try {
-        fireStart()
-        const utt = new SpeechSynthesisUtterance(text)
-        const best = pickBestVoice(window.speechSynthesis.getVoices())
-        if (best) utt.voice = best
-        utt.onend = () => resolve()
-        utt.onerror = () => resolve()
-        window.speechSynthesis.speak(utt)
-      } catch {
-        resolve()
-      }
-    })
-  }
+  function fireStart() { if (onStartCb && !started) { started = true; onStartCb() } }
 
-  async function pump() {
-    if (playing) return
-    playing = true
-    while (queue.length) {
-      const text = queue.shift() as string
-      abort = new AbortController()
-      try {
-        // Kokoro: the request blocks until this chunk finishes playing.
-        const res = await fetch(`${TTS_URL}/speak`, {
-          method: 'POST',
-          signal: abort.signal,
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
-        })
-        if (!res.ok) throw new Error(`tts ${res.status}`)
-      } catch (err) {
-        if ((err as Error)?.name === 'AbortError') { playing = false; return }
-        await webSpeechChunk(text) // server unreachable → system voice
-      }
-    }
-    playing = false
-    if (ended) {
-      const cb = onDoneCb
-      onStartCb = null
-      onDoneCb = null
-      cb?.()
+  function webSpeechAll() {
+    fireStart()
+    try {
+      const utt = new SpeechSynthesisUtterance(buffer.trim())
+      const best = pickBestVoice(window.speechSynthesis.getVoices())
+      if (best) utt.voice = best
+      utt.onend = () => settle()
+      utt.onerror = () => settle()
+      window.speechSynthesis.speak(utt)
+    } catch {
+      settle()
     }
   }
 
   function speakStream(onStart: () => void, onDone: () => void): SpeechStream {
-    queue = []
-    started = false
-    ended = false
     onStartCb = onStart
     onDoneCb = onDone
+    started = false
+    settled = false
+    fallback = false
+    buffer = ''
+    chain = Promise.resolve()
     return {
       push(text: string) {
         const t = (text || '').trim()
-        if (t) { queue.push(t); void pump() }
+        if (!t) return
+        buffer += (buffer ? ' ' : '') + t
+        chain = chain.then(() =>
+          fetch(`${TTS_URL}/speak`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: t }),
+          })
+            .then(res => { if (!res.ok) throw new Error(`tts ${res.status}`) })
+            .catch(() => { fallback = true }),
+        )
       },
-      done() { ended = true; void pump() },
+      done() {
+        chain = chain.then(async () => {
+          if (fallback) { webSpeechAll(); return }
+          await fetch(`${TTS_URL}/done`, { method: 'POST' }).catch(() => {
+            fallback = true
+            webSpeechAll()
+          })
+        })
+      },
     }
   }
 
@@ -162,12 +158,12 @@ export function createVoiceOutput(): VoiceOutput {
       stream.done()
     },
     cancel() {
-      queue = []
-      ended = true
-      started = false
+      settled = true // ignore any in-flight 'idle' from the cancelled turn
       onStartCb = null
       onDoneCb = null
-      abort?.abort()
+      started = false
+      fallback = false
+      buffer = ''
       fetch(`${TTS_URL}/cancel`, { method: 'POST' }).catch(() => {})
       try { window.speechSynthesis.cancel() } catch { /* ignore */ }
     },
