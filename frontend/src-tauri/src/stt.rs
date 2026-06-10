@@ -62,9 +62,7 @@ pub fn spawn_stt(app: AppHandle) {
                                         v.get("state").and_then(|t| t.as_str()).unwrap_or("");
                                     let detail =
                                         v.get("detail").and_then(|t| t.as_str()).unwrap_or("");
-                                    if state == "error" || state == "denied" {
-                                        log::warn!("[stt] {state}: {detail}");
-                                    }
+                                    log::info!("[stt] status: {state} {detail}");
                                     let _ = app.emit(
                                         "stt-status",
                                         serde_json::json!({ "state": state, "detail": detail }),
@@ -92,6 +90,16 @@ pub fn stt_start(state: State<'_, SttState>) {
 #[tauri::command]
 pub fn stt_stop(state: State<'_, SttState>) {
     write_cmd(&state, "stop\n");
+}
+
+#[tauri::command]
+pub fn stt_pause(state: State<'_, SttState>) {
+    write_cmd(&state, "pause\n");
+}
+
+#[tauri::command]
+pub fn stt_resume(state: State<'_, SttState>) {
+    write_cmd(&state, "resume\n");
 }
 
 fn write_cmd(state: &State<'_, SttState>, cmd: &str) {

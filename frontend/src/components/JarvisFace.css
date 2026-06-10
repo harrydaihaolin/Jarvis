@@ -140,3 +140,28 @@
 .jf-shell.speaking  .jf-status { color: #444; }
 .jf-shell.happy     .jf-status { color: #3a3a3a; }
 .jf-shell.surprised .jf-status { color: #555; }
+
+/* ── Listening (Siri-style cyan glow while the user speaks) ── */
+.jf-shell.listening .jf-face {
+  border-color: #1e6fa8;
+  animation: jf-listen-glow 1.6s ease-in-out infinite;
+}
+@keyframes jf-listen-glow {
+  0%,100% {
+    box-shadow: 0 0 0 1px rgba(0,180,255,0.10), 0 0 22px 2px rgba(0,170,255,0.28), inset 0 0 60px rgba(0,0,0,0.9);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(0,180,255,0.18), 0 0 44px 10px rgba(0,190,255,0.45), inset 0 0 60px rgba(0,0,0,0.9);
+  }
+}
+/* soft rotating cyan halo */
+.jf-shell.listening .jf-ring-outer {
+  opacity: 1;
+  background: conic-gradient(from 0deg, rgba(0,200,255,0) 0%, rgba(0,200,255,0.5) 20%, rgba(0,200,255,0) 45%, rgba(0,200,255,0) 60%, rgba(0,200,255,0.35) 80%, rgba(0,200,255,0) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #fff calc(100% - 3px));
+  animation: jf-spin 2.4s linear infinite;
+}
+.jf-shell.listening .jf-pupil {
+  background: radial-gradient(circle at 50% 50%, #0a0a0a 0%, #143a4a 30%, #1e6fa8 55%, #0a2535 72%, #cfe8f5 76%, #9fc8dd 90%, #5a7c8a 100%);
+}

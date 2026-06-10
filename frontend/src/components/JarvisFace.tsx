@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import './JarvisFace.css'
 
-export type Emotion = 'idle' | 'speaking' | 'thinking' | 'happy' | 'surprised'
+export type Emotion = 'idle' | 'speaking' | 'thinking' | 'happy' | 'surprised' | 'listening'
 
 interface Props {
   emotion: Emotion

@@ -66,7 +66,7 @@
 .jf-text-input:focus  { border-color: #2e2e2e; }
 .jf-text-input:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* ── Mic button (push-to-talk / listening state) ── */
+/* ── Mic button: passive listener indicator + mute toggle ── */
 .jf-mic {
   flex-shrink: 0;
   width: 40px;
@@ -82,13 +82,22 @@
   justify-content: center;
   transition: all 0.2s;
 }
-.jf-mic:hover { border-color: #2e2e2e; color: #ccc; }
-.jf-mic.listening {
+.jf-mic:hover { border-color: #2e2e2e; }
+/* armed: listening for "Hey Jarvis" — subtle steady glow */
+.jf-mic.on {
+  border-color: #2c5a4a;
+  color: #6fd0b0;
+  box-shadow: 0 0 0 2px rgba(61,220,132,0.10);
+}
+/* in a conversation — red pulse */
+.jf-mic.active {
   border-color: #c0392b;
   color: #ff6b6b;
   box-shadow: 0 0 0 3px rgba(192,57,43,0.18);
   animation: jf-mic-pulse 1.2s ease-in-out infinite;
 }
+/* muted */
+.jf-mic.off { color: #555; opacity: 0.7; }
 @keyframes jf-mic-pulse {
   0%,100% { box-shadow: 0 0 0 3px rgba(192,57,43,0.18); }
   50%     { box-shadow: 0 0 0 6px rgba(192,57,43,0.30); }

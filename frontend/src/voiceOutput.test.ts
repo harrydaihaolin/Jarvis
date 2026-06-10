@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createVoiceOutput, stripEmotionTags } from './voiceOutput'
+import { createVoiceOutput, stripEmotionTags, toSpokenText } from './voiceOutput'
 
 describe('stripEmotionTags', () => {
   it('removes <emotion value="x"/> tags', () => {
@@ -10,6 +10,24 @@ describe('stripEmotionTags', () => {
   })
   it('passes plain text unchanged', () => {
     expect(stripEmotionTags('Hello world')).toBe('Hello world')
+  })
+})
+
+describe('toSpokenText', () => {
+  it('leaves a short reply unchanged (minus emotion tags)', () => {
+    expect(toSpokenText('<emotion value="x"/> Two plus two is four.')).toBe('Two plus two is four.')
+  })
+  it('does not read fenced code blocks aloud', () => {
+    const out = toSpokenText('Here is the config:\n```json\n{"secret":"value","a":1}\n```')
+    expect(out).not.toContain('secret')
+    expect(out.toLowerCase()).toContain('screen')
+  })
+  it('summarizes a very long reply to a lead-in plus a screen note', () => {
+    const long = 'Here is what I found. ' + 'data '.repeat(300)
+    const out = toSpokenText(long)
+    expect(out.length).toBeLessThan(long.length)
+    expect(out.toLowerCase()).toContain('screen')
+    expect(out).toContain('Here is what I found.')
   })
 })
 
