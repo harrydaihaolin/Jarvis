@@ -28,7 +28,6 @@ final class STT: NSObject {
     private var active = false   // host wants us listening (start..stop)
     private var paused = false   // temporarily suspended (during TTS)
     private var running = false  // a recognition session is currently live
-    private var aecConfigured = false // hardware echo cancellation enabled once
 
     func emit(_ obj: [String: String]) {
         if let data = try? JSONSerialization.data(withJSONObject: obj),
@@ -70,12 +69,6 @@ final class STT: NSObject {
         lastText = ""
 
         let input = engine.inputNode
-        // Hardware echo cancellation: lets the user barge in while Jarvis speaks
-        // without the mic transcribing his own TTS. Configure once.
-        if !aecConfigured {
-            do { try input.setVoiceProcessingEnabled(true); aecConfigured = true }
-            catch { fputs("[stt] echo cancellation unavailable: \(error)\n", stderr) }
-        }
         let format = input.outputFormat(forBus: 0)
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in

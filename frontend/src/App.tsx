@@ -98,9 +98,14 @@ export default function App() {
     setBusy(true); busyRef.current = true
     setEmotion('thinking')
     voiceOutput.cancel()
+    void tauriInvoke('stt_pause') // echo guard: stop hearing while we think + speak
     const turnDone = () => {
       setBusy(false); busyRef.current = false
-      if (activeRef.current) { resetIdleTimer(); playChime() } // your turn
+      if (activeRef.current && micEnabledRef.current) {
+        void tauriInvoke('stt_resume')
+        resetIdleTimer()
+        playChime() // your turn
+      }
       setEmotion('idle')
     }
     try {
