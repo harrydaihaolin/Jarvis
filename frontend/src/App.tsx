@@ -98,14 +98,16 @@ export default function App() {
     setBusy(true); busyRef.current = true
     setEmotion('thinking')
     voiceOutput.cancel()
+    // Don't let the conversation idle-timeout fire mid-turn (a web search can
+    // take longer than the timeout).
+    if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = null }
     void tauriInvoke('stt_pause') // echo guard: stop hearing while we think + speak
     const turnDone = () => {
       setBusy(false); busyRef.current = false
-      if (activeRef.current && micEnabledRef.current) {
-        void tauriInvoke('stt_resume')
-        resetIdleTimer()
-        playChime() // your turn
-      }
+      // ALWAYS re-arm the listener (even if we dropped to idle) so "Hey Jarvis"
+      // keeps working — the mic is only paused *during* a turn.
+      if (micEnabledRef.current) void tauriInvoke('stt_resume')
+      if (activeRef.current) { resetIdleTimer(); playChime() } // your turn
       setEmotion('idle')
     }
     try {
