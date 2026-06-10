@@ -35,6 +35,15 @@ describe('createSpeechChunker', () => {
     expect(out).toContain('All set.')
   })
 
+  it('splits a pacing line from the next block when the model drops the space', () => {
+    // Real case: the agent ends the pacing block and starts the next with no
+    // space across the tool boundary ("right now!Got the results!").
+    const c = createSpeechChunker()
+    const out = [...c.push('Let me look that up right now!Got the results! '), ...c.flush()]
+    expect(out[0]).toBe('Let me look that up right now!')
+    expect(out).toContain('Got the results!')
+  })
+
   it('flush emits trailing text with no terminator', () => {
     const c = createSpeechChunker()
     expect(c.push('Just a tail with no period')).toEqual([])

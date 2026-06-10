@@ -15,8 +15,10 @@ export function createSpeechChunker() {
   let buf = ''
   let inFence = false
 
-  // A sentence ends at . ! ? followed by whitespace, or at a newline.
-  const SENT = /([.!?])\s|\n/
+  // A sentence ends at . ! ? followed by whitespace OR (when the model drops the
+  // space across content blocks, e.g. "right now!Got the results!") a capital
+  // letter or quote, or at a newline.
+  const SENT = /[.!?]+(?=\s|["'A-Z])|\n/
 
   function clean(s: string): string {
     return stripEmotionTags(s).trim()
