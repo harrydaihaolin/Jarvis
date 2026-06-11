@@ -78,3 +78,14 @@ export async function memoryRecall(anthropic, storeId, query) {
   if (out.length) return out.join("\n");
   return query ? `No memories matching "${query}".` : "Memory is empty.";
 }
+
+/**
+ * Append a <memory> block to a system prompt string.
+ * Returns system unchanged if memText is blank.
+ */
+export function appendMemoryBlock(system, memText) {
+  const trimmed = String(memText ?? "").trim();
+  if (!trimmed) return system ?? "";
+  const block = `<memory>\n${trimmed}\n</memory>`;
+  return system ? `${system}\n\n${block}` : block;
+}
