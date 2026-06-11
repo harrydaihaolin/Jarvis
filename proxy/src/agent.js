@@ -91,14 +91,14 @@ function withToolCache(tools) {
 /**
  * Run the tool-use loop.
  * @param {object} a
- * @param {import('@anthropic-ai/sdk').Anthropic} a.anthropic
+ * @param {{ streamTurn: (params: object, onText: ((text: string) => void) | null) => Promise<object> }} a.provider
  * @param {object} a.baseParams   - from openaiToAnthropic(): { model, max_tokens, messages, system?, temperature? }
  * @param {object} a.cfg          - { webSearch, webSearchMaxUses, enableCommands, maxIterations }
  * @param {(text:string)=>void} a.onText - receives streamed assistant text deltas
  * @param {(evt:object)=>void} [a.onEvent] - optional observability hook for tool steps
  * @returns {Promise<{finishReason:string, iterations:number}>}
  */
-export async function runAgent({ anthropic, baseParams, cfg, env = process.env, onText, onEvent }) {
+export async function runAgent({ provider, baseParams, cfg, env = process.env, onText, onEvent }) {
   const tools = withToolCache(buildToolDefs(cfg));
   const system = buildSystem(baseParams.system, cfg);
   const messages = baseParams.messages.slice();
@@ -112,18 +112,17 @@ export async function runAgent({ anthropic, baseParams, cfg, env = process.env, 
 
   for (let i = 0; i < maxIterations; i++) {
     iterations = i + 1;
-    const stream = anthropic.messages.stream({
-      model: baseParams.model,
-      max_tokens: baseParams.max_tokens,
-      ...(typeof baseParams.temperature === "number" ? { temperature: baseParams.temperature } : {}),
-      system,
-      tools,
-      messages,
-    });
-
-    if (onText) stream.on("text", (delta) => onText(delta));
-
-    const final = await stream.finalMessage();
+    const final = await provider.streamTurn(
+      {
+        model: baseParams.model,
+        max_tokens: baseParams.max_tokens,
+        ...(typeof baseParams.temperature === "number" ? { temperature: baseParams.temperature } : {}),
+        system,
+        tools,
+        messages,
+      },
+      onText ?? null
+    );
     const stop = final.stop_reason;
 
     // Surface web_search activity + citations to the console (server tool runs inline).
