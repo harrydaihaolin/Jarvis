@@ -57,6 +57,7 @@ if (!ANTHROPIC_API_KEY) {
 const DEFAULT_MAX_TOKENS = Number.parseInt(ANTHROPIC_MAX_TOKENS, 10) || 1024;
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const provider = createProvider(process.env);
+const PRIMARY_MODEL = FIREWORKS_API_KEY ? FIREWORKS_MODEL : ANTHROPIC_MODEL;
 const preambleProvider =
   FIREWORKS_API_KEY && JARVUS_PREAMBLE_ENABLED !== "false"
     ? createFireworksProvider({
@@ -99,13 +100,13 @@ function authorize(req, res) {
 }
 
 // ── Health & info ─────────────────────────────────────────────────────────────
-app.get("/health", (_req, res) => res.json({ status: "ok", model: ANTHROPIC_MODEL }));
+app.get("/health", (_req, res) => res.json({ status: "ok", model: PRIMARY_MODEL }));
 app.get("/", (_req, res) =>
   res.json({
     name: "jarvus-proxy",
-    description: "OpenAI-compatible bridge to the Anthropic Claude API.",
+    description: "OpenAI-compatible agent proxy (Fireworks-primary with Claude fallback).",
     endpoints: ["/v1/chat/completions", "/v1/models", "/health"],
-    model: ANTHROPIC_MODEL,
+    model: PRIMARY_MODEL,
   }),
 );
 
@@ -113,7 +114,7 @@ app.get("/", (_req, res) =>
 app.get(["/v1/models", "/models"], (_req, res) =>
   res.json({
     object: "list",
-    data: [{ id: ANTHROPIC_MODEL, object: "model", owned_by: "anthropic" }],
+    data: [{ id: PRIMARY_MODEL, object: "model", owned_by: "anthropic" }],
   }),
 );
 
@@ -317,10 +318,9 @@ async function start() {
   createServer(app).listen(port, () => {
     const toolNames = buildToolDefs(agentCfg).map((t) => t.name);
     console.log(`[proxy] listening on http://localhost:${port}`);
-    const primaryModel = FIREWORKS_API_KEY ? FIREWORKS_MODEL : ANTHROPIC_MODEL;
     const fallback =
       !FIREWORKS_API_KEY ? "none" : FIREWORKS_FALLBACK_ENABLED !== "false" ? ANTHROPIC_MODEL : "disabled";
-    console.log(`[proxy] model=${primaryModel}  fallback=${fallback}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
+    console.log(`[proxy] model=${PRIMARY_MODEL}  fallback=${fallback}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
     console.log(`[proxy] agent tools: ${toolNames.join(", ")}`);
     console.log(`[proxy] workspace: ${AGENT_WORKSPACE}  commands=${agentCfg.enableCommands ? "enabled" : "disabled"}`);
 

@@ -10,7 +10,7 @@ talk or type, and hear it speak back in a natural local neural voice.
 ```
 [Camera] → [Swift STT sidecar / Wake word] → Tauri "transcript" / "wake-word" event → TextInput
 [Camera] → [Swift Eye-Tracker sidecar]      → Tauri "face-position" event            → JarvisFace eyes
-[TextInput] → POST /v1/chat/completions     → [Local Proxy :8787]                    → Claude API
+[TextInput] → POST /v1/chat/completions     → [Local Proxy :8787]                    → Fireworks (primary) / Claude (fallback)
 [Kokoro TTS :8788]                          → audio output                            → JarvisFace emotion
 [Proxy SSE /events]                         → EventSource                             → AgentConsole
 ```
@@ -25,6 +25,8 @@ No public tunnel required — everything runs on localhost.
 | `proxy/src/translate.js` | OpenAI ↔ Anthropic message mapping (system hoisting, role merge, leading-user). |
 | `proxy/src/agent.js` | Runs the Claude tool-use loop; streams spoken text via `onText()`. |
 | `proxy/src/conversation.js` | Per-turn working memory so tool results survive across turns. |
+| `proxy/src/providers/` | Provider layer — Fireworks-primary, Claude fallback (`streamTurn`). |
+| `proxy/src/preamble.js` | Concurrent spoken acknowledgment (~150 ms) while the agent loop starts. |
 | `proxy/src/tools/` | Tool defs + executors; `sandbox.js` — workspace + command guard. |
 | `tts/` | Local Kokoro-82M neural TTS server (`server.py`). Run with `./tts/start.sh`. |
 | `frontend/` | React + Tauri desktop app: animated face, voice I/O, agent console. |
@@ -36,7 +38,7 @@ No public tunnel required — everything runs on localhost.
 
 ## Agent tools & safety
 
-- **`web_search`** — Anthropic server tool (no executor; needs Console opt-in).
+- **`web_search`** — Anthropic server tool (no executor; needs Console opt-in). Only runs on Claude turns — Fireworks-primary turns have no live web search.
 - **Read-only** (`list_dir`, `read_file`, `search_files`) — auto-execute.
 - **Mutating** (`write_file`, `edit_file`, `run_command`) — require `user_confirmed: true`; audited.
 - **Sandbox**: every path goes through `resolveInWorkspace()` and stays under `AGENT_WORKSPACE`.
