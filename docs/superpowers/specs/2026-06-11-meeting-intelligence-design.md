@@ -35,11 +35,13 @@ Meeting transcription reuses the existing `_screen_loop` in `PerceptionService`.
 ```
 agent/src/perception/meeting/
   __init__.py
-  detector.py       # zoom_is_running() + state machine
-  transcriber.py    # meeting-specific screen prompt + transcript accumulation
+  detector.py       # zoom_is_running()
+  transcriber.py    # MEETING_SCREEN_PROMPT constant + transcript accumulation helpers
   summarizer.py     # Claude call → summary + action items
   writer.py         # memory_save to Anthropic Memory Store
 ```
+
+The meeting state machine and `_on_meeting_end()` handler live in `perception/service.py` — they are part of `PerceptionService._meeting_loop()`, not a separate class.
 
 ---
 
@@ -70,9 +72,9 @@ Minimum meeting duration: 60 seconds. Shorter detections (Zoom opened/closed qui
 
 ---
 
-## Transcription — `transcriber.py`
+## Transcription — `transcriber.py` + `service.py`
 
-When `state.in_meeting` is True, `_screen_loop` uses this prompt instead of the normal screen prompt, at a 10s interval:
+`transcriber.py` exports `MEETING_SCREEN_PROMPT` and `append_transcript_line()`. The switching logic lives in `PerceptionService._screen_loop()` in `service.py`: when `state.in_meeting` is True it uses `MEETING_SCREEN_PROMPT` at a 10s interval instead of the normal 15s screen prompt.
 
 ```
 This screen shows a Zoom meeting. Extract any visible text from:

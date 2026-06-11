@@ -60,9 +60,29 @@ class PerceptionState:
 
 `to_context_string()` returns the text injected into the system prompt:
 
+```python
+def to_context_string(self) -> str:
+    parts = []
+    if self.screen_description:
+        parts.append(f"Screen: {self.screen_description}")
+    camera_parts = []
+    if self.face_emotion:
+        camera_parts.append(self.face_emotion.capitalize())
+    if self.presence:
+        camera_parts.append(self.presence.replace("_", " "))
+    if self.environment:
+        camera_parts.append(self.environment)
+    if self.people_in_frame:
+        camera_parts.append(f"{self.people_in_frame} other(s) visible")
+    if camera_parts:
+        parts.append(f"Camera: {', '.join(camera_parts)}.")
+    return "\n".join(parts)
+```
+
+Example output:
 ```
 Screen: VS Code open, editing agent/src/perception/service.py in the Jarvis project.
-Camera: Focused, at desk. Home office, clean desk, natural light, one other person visible.
+Camera: Focused, at desk, home office clean desk natural light, 1 other(s) visible.
 ```
 
 If a field is empty (camera unavailable, no screen yet) it is omitted from the string.
