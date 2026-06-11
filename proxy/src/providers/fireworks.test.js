@@ -1,7 +1,7 @@
 // proxy/src/providers/fireworks.test.js
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toOpenAIMessages, toOpenAITools, buildFinalMessage } from "./fireworks.js";
+import { toOpenAIMessages, toOpenAITools, buildFinalMessage, createFireworksProvider } from "./fireworks.js";
 
 // ── toOpenAIMessages ──────────────────────────────────────────────────────────
 
@@ -117,4 +117,30 @@ test("buildFinalMessage: infers tool_use when tool calls present despite stop fi
   const tc = new Map([[0, { id: "c1", name: "list_dir", arguments: "{}" }]]);
   const result = buildFinalMessage({ text: "", toolCalls: tc, finishReason: "stop" });
   assert.equal(result.stop_reason, "tool_use");
+});
+
+test("createFireworksProvider merges extraBody into the request", async () => {
+  const originalFetch = globalThis.fetch;
+  let sentBody = null;
+  globalThis.fetch = async (_url, opts) => {
+    sentBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      body: (async function* () {
+        yield new TextEncoder().encode('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n');
+      })(),
+    };
+  };
+  try {
+    const provider = createFireworksProvider({
+      apiKey: "k",
+      model: "m",
+      extraBody: { reasoning_effort: "low" },
+    });
+    await provider.streamTurn({ max_tokens: 60, system: [], tools: [], messages: [{ role: "user", content: "hi" }] }, null);
+    assert.equal(sentBody.reasoning_effort, "low");
+    assert.equal(sentBody.model, "m");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

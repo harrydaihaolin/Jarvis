@@ -107,7 +107,7 @@ async function* readSSE(readable) {
   }
 }
 
-export function createFireworksProvider({ apiKey, model }) {
+export function createFireworksProvider({ apiKey, model, extraBody }) {
   return {
     async streamTurn({ max_tokens, temperature, system, tools, messages }, onText) {
       const body = {
@@ -116,6 +116,9 @@ export function createFireworksProvider({ apiKey, model }) {
         messages: toOpenAIMessages(system, messages),
         stream: true,
         ...(typeof temperature === "number" ? { temperature } : {}),
+        ...(extraBody && typeof extraBody === "object" && Object.keys(extraBody).length > 0
+          ? extraBody
+          : {}),
       };
       const openaiTools = toOpenAITools(tools ?? []);
       if (openaiTools.length) body.tools = openaiTools;

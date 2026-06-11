@@ -17,6 +17,8 @@ import { buildToolDefs } from "./tools/index.js";
 import { addClient, broadcast, clientCount } from "./events.js";
 import { resolveStoreId, memoryRecall, appendMemoryBlock } from "./memory.js";
 import { createProvider } from "./providers/index.js";
+import { createFireworksProvider } from "./providers/fireworks.js";
+import { runWithPreamble } from "./preamble.js";
 
 // Load root .env (one level up) so the whole project shares one env file.
 dotenv.config({ path: new URL("../../.env", import.meta.url).pathname });
@@ -42,6 +44,8 @@ const {
   FIREWORKS_API_KEY = "",
   FIREWORKS_MODEL = "accounts/fireworks/models/kimi-k2p5",
   FIREWORKS_FALLBACK_ENABLED = "true",
+  FIREWORKS_PREAMBLE_MODEL = "accounts/fireworks/models/gpt-oss-120b",
+  JARVUS_PREAMBLE_ENABLED = "true",
   AGENT_NOTION_READONLY = "true",
 } = process.env;
 
@@ -53,6 +57,14 @@ if (!ANTHROPIC_API_KEY) {
 const DEFAULT_MAX_TOKENS = Number.parseInt(ANTHROPIC_MAX_TOKENS, 10) || 1024;
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const provider = createProvider(process.env);
+const preambleProvider =
+  FIREWORKS_API_KEY && JARVUS_PREAMBLE_ENABLED !== "false"
+    ? createFireworksProvider({
+        apiKey: FIREWORKS_API_KEY,
+        model: FIREWORKS_PREAMBLE_MODEL,
+        extraBody: { reasoning_effort: "low" },
+      })
+    : null;
 
 // Spoken filler streamed when the model goes quiet mid-turn, so the user is
 // never met with silence while a tool runs or the model is thinking.
@@ -229,16 +241,25 @@ async function handleChatCompletions(req, res) {
     let finishReason;
     let messages;
     try {
-      ({ finishReason, messages } = await runAgent({
-        provider,
-        baseParams: params,
-        cfg: agentCfg,
+      ({ finishReason, messages } = await runWithPreamble({
+        preambleProvider,
+        userText,
+        runMain: (onMainText) =>
+          runAgent({
+            provider,
+            baseParams: params,
+            cfg: agentCfg,
+            onText: (delta) => {
+              lastActivity = Date.now();
+              onMainText(delta);
+            },
+            onEvent,
+          }),
         onText: (delta) => {
           lastActivity = Date.now();
           agentText += delta;
           send(streamChunk({ id, created, model, delta: { content: delta } }));
         },
-        onEvent,
       }));
     } finally {
       clearInterval(heartbeat);
