@@ -56,7 +56,7 @@ const provider = createProvider(process.env);
 
 // Spoken filler streamed when the model goes quiet mid-turn, so the user is
 // never met with silence while a tool runs or the model is thinking.
-const HEARTBEAT_MS = Number.parseInt(process.env.JARVUS_HEARTBEAT_MS || "4500", 10) || 4500;
+const HEARTBEAT_MS = Number.parseInt(process.env.JARVUS_HEARTBEAT_MS || "1500", 10) || 1500;
 const HEARTBEAT_FILLERS = [
   "Still on it, one sec.",
   "Almost there.",
@@ -224,7 +224,7 @@ async function handleChatCompletions(req, res) {
       const lead = agentText && !/\s$/.test(agentText) ? " " : "";
       send(streamChunk({ id, created, model, delta: { content: `${lead}${HEARTBEAT_FILLERS[fillerIdx]} ` } }));
       lastActivity = Date.now();
-    }, 1000);
+    }, 500);
 
     let finishReason;
     let messages;
