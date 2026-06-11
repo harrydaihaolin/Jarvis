@@ -91,3 +91,41 @@ test("respects the iteration cap when tools loop forever", async () => {
   });
   assert.equal(iterations, 3);
 });
+
+test("executes two tools from one turn and collects both results", async () => {
+  const provider = fakeProvider([
+    {
+      text: ["Checking two things. "],
+      final: {
+        stop_reason: "tool_use",
+        content: [
+          { type: "tool_use", id: "t1", name: "list_dir", input: { path: "." } },
+          { type: "tool_use", id: "t2", name: "list_dir", input: { path: "." } },
+        ],
+      },
+    },
+    {
+      text: ["Both done."],
+      final: { stop_reason: "end_turn", content: [{ type: "text", text: "Both done." }] },
+    },
+  ]);
+
+  const events = [];
+  const { finishReason } = await runAgent({
+    provider,
+    baseParams: {
+      model: "m",
+      max_tokens: 256,
+      messages: [{ role: "user", content: "check both" }],
+    },
+    cfg,
+    env,
+    onText: () => {},
+    onEvent: (e) => events.push(e),
+  });
+
+  assert.equal(finishReason, "stop");
+  const toolCalls = events.filter((e) => e.type === "tool_call");
+  assert.equal(toolCalls.length, 2);
+  assert.ok(toolCalls.every((e) => e.name === "list_dir"));
+});

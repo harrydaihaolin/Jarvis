@@ -153,51 +153,51 @@ export async function runAgent({ provider, baseParams, cfg, env = process.env, o
         break;
       }
       messages.push({ role: "assistant", content: final.content });
-      const results = [];
-      for (const b of toolUses) {
-        // Long-term memory tools (backed by the managed memory store).
-        if (cfg.memory && (b.name === "memory_recall" || b.name === "memory_read" || b.name === "memory_save")) {
-          const { anthropic: client, storeId } = cfg.memory;
-          let out;
-          try {
-            if (b.name === "memory_recall") out = await memoryRecall(client, storeId, b.input?.query);
-            else if (b.name === "memory_read") out = await memoryRead(client, storeId, b.input?.path);
-            else out = await memorySave(client, storeId, b.input?.path, b.input?.content);
-          } catch (e) {
-            out = `ERROR: ${e.message}`;
+      const results = await Promise.all(
+        toolUses.map(async (b) => {
+          // Long-term memory tools (backed by the managed memory store).
+          if (cfg.memory && (b.name === "memory_recall" || b.name === "memory_read" || b.name === "memory_save")) {
+            const { anthropic: client, storeId } = cfg.memory;
+            let out;
+            try {
+              if (b.name === "memory_recall") out = await memoryRecall(client, storeId, b.input?.query);
+              else if (b.name === "memory_read") out = await memoryRead(client, storeId, b.input?.path);
+              else out = await memorySave(client, storeId, b.input?.path, b.input?.content);
+            } catch (e) {
+              out = `ERROR: ${e.message}`;
+            }
+            const isErr = typeof out === "string" && out.startsWith("ERROR");
+            onEvent?.({ type: "memory", op: b.name.replace("memory_", ""), path: b.input?.path, isError: isErr });
+            return { type: "tool_result", tool_use_id: b.id, content: String(out), ...(isErr ? { is_error: true } : {}) };
           }
-          const isErr = typeof out === "string" && out.startsWith("ERROR");
-          onEvent?.({ type: "memory", op: b.name.replace("memory_", ""), path: b.input?.path, isError: isErr });
-          results.push({ type: "tool_result", tool_use_id: b.id, content: String(out), ...(isErr ? { is_error: true } : {}) });
-          continue;
-        }
 
-        // Display-only tool: render in the console, don't execute on disk.
-        if (b.name === "show_media") {
-          const url = b.input?.url;
-          if (b.input?.media_type === "image" && url) {
-            sessionImages.push({ url, caption: b.input?.caption || "" });
+          // Display-only tool: render in the console, don't execute on disk.
+          if (b.name === "show_media") {
+            const url = b.input?.url;
+            if (b.input?.media_type === "image" && url) {
+              sessionImages.push({ url, caption: b.input?.caption || "" });
+            }
+            onEvent?.({
+              type: "media",
+              mediaType: b.input?.media_type || "link",
+              url,
+              caption: b.input?.caption || "",
+            });
+            return { type: "tool_result", tool_use_id: b.id, content: "Displayed in the user's console." };
           }
-          onEvent?.({
-            type: "media",
-            mediaType: b.input?.media_type || "link",
-            url,
-            caption: b.input?.caption || "",
-          });
-          results.push({ type: "tool_result", tool_use_id: b.id, content: "Displayed in the user's console." });
-          continue;
-        }
-        onEvent?.({ type: "tool_call", name: b.name, input: b.input });
-        const out = await executeTool(b.name, b.input, { env, cfg });
-        const isError = typeof out === "string" && out.startsWith("ERROR");
-        onEvent?.({ type: "tool_result", name: b.name, isError });
-        results.push({
-          type: "tool_result",
-          tool_use_id: b.id,
-          content: String(out),
-          ...(isError ? { is_error: true } : {}),
-        });
-      }
+
+          onEvent?.({ type: "tool_call", name: b.name, input: b.input });
+          const out = await executeTool(b.name, b.input, { env, cfg });
+          const isError = typeof out === "string" && out.startsWith("ERROR");
+          onEvent?.({ type: "tool_result", name: b.name, isError });
+          return {
+            type: "tool_result",
+            tool_use_id: b.id,
+            content: String(out),
+            ...(isError ? { is_error: true } : {}),
+          };
+        })
+      );
       messages.push({ role: "user", content: results });
       continue;
     }
