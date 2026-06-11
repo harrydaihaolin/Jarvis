@@ -286,7 +286,9 @@ async function start() {
     const toolNames = buildToolDefs(agentCfg).map((t) => t.name);
     console.log(`[proxy] listening on http://localhost:${port}`);
     const primaryModel = FIREWORKS_API_KEY ? FIREWORKS_MODEL : ANTHROPIC_MODEL;
-    console.log(`[proxy] model=${primaryModel}  fallback=${FIREWORKS_API_KEY ? ANTHROPIC_MODEL : "none"}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
+    const fallback =
+      !FIREWORKS_API_KEY ? "none" : FIREWORKS_FALLBACK_ENABLED !== "false" ? ANTHROPIC_MODEL : "disabled";
+    console.log(`[proxy] model=${primaryModel}  fallback=${fallback}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
     console.log(`[proxy] agent tools: ${toolNames.join(", ")}`);
     console.log(`[proxy] workspace: ${AGENT_WORKSPACE}  commands=${agentCfg.enableCommands ? "enabled" : "disabled"}`);
 
