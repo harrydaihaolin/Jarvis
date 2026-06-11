@@ -3,9 +3,9 @@
 // text reaches the caller first; main loop text follows after preamble completes.
 
 export const PREAMBLE_SYSTEM =
-  "Generate a 3–6 word spoken acknowledgment for a voice assistant. " +
-  "Output ONLY those words plus a period. Be natural and varied. " +
-  'Examples: "On it." "Let me check that." "Sure, one sec." "Looking that up."';
+  "You write short spoken acknowledgments for a voice assistant. " +
+  "Given a user request, output ONLY a 3\u20136 word acknowledgment plus a period \u2014 never answer the request itself. " +
+  'Be natural and varied. Examples: "On it." "Let me check that." "Sure, one sec." "Looking that up."';
 
 /**
  * Run preamble and main agent loop concurrently.
@@ -31,8 +31,8 @@ export async function runWithPreamble({ preambleProvider, userText, runMain, onT
     .streamTurn(
       {
         system: [{ type: "text", text: PREAMBLE_SYSTEM }],
-        messages: [{ role: "user", content: userText }],
-        max_tokens: 20,
+        messages: [{ role: "user", content: `The user said: ${JSON.stringify(userText)} \u2014 output only the acknowledgment.` }],
+        max_tokens: 60,
         tools: [],
       },
       (delta) => onText(delta),
@@ -45,8 +45,13 @@ export async function runWithPreamble({ preambleProvider, userText, runMain, onT
     else mainBuffer.push(delta);
   });
 
-  // Wait for preamble, then flush buffered main text and enable live streaming.
-  await preambleTask;
+  // Wait for the preamble — or a main-loop failure, whichever comes first.
+  // mainFailure never settles on success, so ordering is preserved; attaching
+  // the catch also prevents an unhandled rejection during the preamble wait.
+  const mainFailure = new Promise((resolve) => {
+    mainResultPromise.catch(resolve);
+  });
+  await Promise.race([preambleTask, mainFailure]);
   preambleDone = true;
   for (const d of mainBuffer) onText(d);
   mainBuffer.length = 0;

@@ -61,6 +61,27 @@ test("skips preamble when userText is empty", async () => {
   assert.deepEqual(received, ["Response."]);
 });
 
+test("main-loop failure rejects promptly while preamble is still running", async () => {
+  let preambleSettled = false;
+  const preambleProvider = {
+    streamTurn: () =>
+      new Promise((resolve) => setTimeout(() => { preambleSettled = true; resolve({}); }, 500)),
+  };
+  const start = Date.now();
+  await assert.rejects(
+    () =>
+      runWithPreamble({
+        preambleProvider,
+        userText: "hello",
+        runMain: async () => { throw new Error("agent exploded"); },
+        onText: () => {},
+      }),
+    /agent exploded/
+  );
+  assert.ok(Date.now() - start < 400, "should reject before the preamble settles");
+  assert.equal(preambleSettled, false);
+});
+
 test("skips preamble when preambleProvider is null", async () => {
   const received = [];
   await runWithPreamble({
