@@ -32,7 +32,7 @@
 - Create: `proxy/src/providers/anthropic.js`
 - Create: `proxy/src/providers/anthropic.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 // proxy/src/providers/anthropic.test.js
@@ -74,7 +74,7 @@ test("streamTurn calls onText for each text delta", async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to confirm it fails**
+- [x] **Step 2: Run test to confirm it fails**
 
 ```bash
 cd proxy && node --test src/providers/anthropic.test.js
@@ -82,7 +82,7 @@ cd proxy && node --test src/providers/anthropic.test.js
 
 Expected: `ERR_MODULE_NOT_FOUND` or `cannot find module './anthropic.js'`
 
-- [ ] **Step 3: Create `proxy/src/providers/anthropic.js`**
+- [x] **Step 3: Create `proxy/src/providers/anthropic.js`**
 
 ```js
 import Anthropic from "@anthropic-ai/sdk";
@@ -106,7 +106,7 @@ export function createAnthropicProvider({ apiKey, _clientOverride }) {
 }
 ```
 
-- [ ] **Step 4: Run tests to confirm they pass**
+- [x] **Step 4: Run tests to confirm they pass**
 
 ```bash
 cd proxy && node --test src/providers/anthropic.test.js
@@ -114,7 +114,7 @@ cd proxy && node --test src/providers/anthropic.test.js
 
 Expected: `✓ createAnthropicProvider returns an object with streamTurn`, `✓ streamTurn calls onText for each text delta`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add proxy/src/providers/anthropic.js proxy/src/providers/anthropic.test.js
@@ -129,7 +129,7 @@ git commit -m "feat(providers): extract Anthropic provider module"
 - Create: `proxy/src/providers/fireworks.js`
 - Create: `proxy/src/providers/fireworks.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // proxy/src/providers/fireworks.test.js
@@ -243,7 +243,7 @@ test("buildFinalMessage: mixed text + tool → both in content", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 cd proxy && node --test src/providers/fireworks.test.js
@@ -251,7 +251,7 @@ cd proxy && node --test src/providers/fireworks.test.js
 
 Expected: `ERR_MODULE_NOT_FOUND` or named-export errors
 
-- [ ] **Step 3: Create `proxy/src/providers/fireworks.js`**
+- [x] **Step 3: Create `proxy/src/providers/fireworks.js`**
 
 ```js
 const FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1";
@@ -413,7 +413,7 @@ export function createFireworksProvider({ apiKey, model }) {
 }
 ```
 
-- [ ] **Step 4: Run tests to confirm they pass**
+- [x] **Step 4: Run tests to confirm they pass**
 
 ```bash
 cd proxy && node --test src/providers/fireworks.test.js
@@ -421,7 +421,7 @@ cd proxy && node --test src/providers/fireworks.test.js
 
 Expected: all 8 tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add proxy/src/providers/fireworks.js proxy/src/providers/fireworks.test.js
@@ -436,7 +436,7 @@ git commit -m "feat(providers): add Fireworks AI provider with SSE normalisation
 - Create: `proxy/src/providers/index.js`
 - Create: `proxy/src/providers/index.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```js
 // proxy/src/providers/index.test.js
@@ -511,7 +511,7 @@ test("throws when Fireworks fails and FIREWORKS_FALLBACK_ENABLED=false", async (
 });
 ```
 
-- [ ] **Step 2: Run tests to confirm they fail**
+- [x] **Step 2: Run tests to confirm they fail**
 
 ```bash
 cd proxy && node --test src/providers/index.test.js
@@ -519,7 +519,7 @@ cd proxy && node --test src/providers/index.test.js
 
 Expected: `ERR_MODULE_NOT_FOUND` or named-export errors
 
-- [ ] **Step 3: Create `proxy/src/providers/index.js`**
+- [x] **Step 3: Create `proxy/src/providers/index.js`**
 
 ```js
 import { createAnthropicProvider } from "./anthropic.js";
@@ -560,7 +560,7 @@ export function createProvider(env = process.env) {
 }
 ```
 
-- [ ] **Step 4: Run tests to confirm they pass**
+- [x] **Step 4: Run tests to confirm they pass**
 
 ```bash
 cd proxy && node --test src/providers/index.test.js
@@ -568,7 +568,7 @@ cd proxy && node --test src/providers/index.test.js
 
 Expected: all 3 tests pass
 
-- [ ] **Step 5: Run all provider tests together**
+- [x] **Step 5: Run all provider tests together**
 
 ```bash
 cd proxy && node --test src/providers/
@@ -576,7 +576,7 @@ cd proxy && node --test src/providers/
 
 Expected: all 11 tests pass
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add proxy/src/providers/index.js proxy/src/providers/index.test.js
@@ -591,7 +591,7 @@ git commit -m "feat(providers): add provider index with Fireworks-primary + Clau
 - Modify: `proxy/src/agent.js` — lines 102, 116–127
 - Modify: `proxy/src/agent.test.js`
 
-- [ ] **Step 1: Update `agent.test.js` to use `fakeProvider`**
+- [x] **Step 1: Update `agent.test.js` to use `fakeProvider`**
 
 Replace the entire `fakeStream` and `fakeAnthropic` block (lines 12–33) with `fakeProvider`, and update all three test calls from `anthropic:` to `provider:`:
 
@@ -692,7 +692,7 @@ test("respects the iteration cap when tools loop forever", async () => {
 });
 ```
 
-- [ ] **Step 2: Run agent tests to confirm they fail (expected — agent.js not updated yet)**
+- [x] **Step 2: Run agent tests to confirm they fail (expected — agent.js not updated yet)**
 
 ```bash
 cd proxy && node --test src/agent.test.js
@@ -700,7 +700,7 @@ cd proxy && node --test src/agent.test.js
 
 Expected: tests fail because `runAgent` still expects `anthropic`, not `provider`
 
-- [ ] **Step 3: Update `proxy/src/agent.js`**
+- [x] **Step 3: Update `proxy/src/agent.js`**
 
 Change line 102 — the function signature:
 ```js
@@ -741,7 +741,7 @@ Change lines 116–127 — the stream call:
     );
 ```
 
-- [ ] **Step 4: Run agent tests to confirm they pass**
+- [x] **Step 4: Run agent tests to confirm they pass**
 
 ```bash
 cd proxy && node --test src/agent.test.js
@@ -749,7 +749,7 @@ cd proxy && node --test src/agent.test.js
 
 Expected: all 3 tests pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add proxy/src/agent.js proxy/src/agent.test.js
@@ -763,7 +763,7 @@ git commit -m "refactor(agent): replace Anthropic SDK call with provider.streamT
 **Files:**
 - Modify: `proxy/src/server.js`
 
-- [ ] **Step 1: Add the provider import and new env vars**
+- [x] **Step 1: Add the provider import and new env vars**
 
 After the existing imports at the top of `server.js`, add:
 ```js
@@ -777,7 +777,7 @@ In the `process.env` destructuring block (around line 24), add three new vars af
   FIREWORKS_FALLBACK_ENABLED = "true",
 ```
 
-- [ ] **Step 2: Create the provider instance after the `anthropic` client**
+- [x] **Step 2: Create the provider instance after the `anthropic` client**
 
 After line 50 (`const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });`), add:
 ```js
@@ -794,7 +794,7 @@ Also update the startup log line (around line 289) to show which LLM is active:
     console.log(`[proxy] model=${primaryModel}  fallback=${FIREWORKS_API_KEY ? ANTHROPIC_MODEL : "none"}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
 ```
 
-- [ ] **Step 3: Wire `provider` into both `runAgent` calls**
+- [x] **Step 3: Wire `provider` into both `runAgent` calls**
 
 There are two `runAgent` calls in `handleChatCompletions`. Change `anthropic` → `provider` in both:
 
@@ -824,7 +824,7 @@ Streaming path (around line 222):
         baseParams: params,
 ```
 
-- [ ] **Step 4: Run the full test suite**
+- [x] **Step 4: Run the full test suite**
 
 ```bash
 cd proxy && npm test
@@ -832,7 +832,7 @@ cd proxy && npm test
 
 Expected: all tests pass (agent, conversation, translate, providers)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add proxy/src/server.js
@@ -843,7 +843,7 @@ git commit -m "feat(server): wire Fireworks provider; primary LLM with Claude fa
 
 ## Task 6: Smoke-test the running proxy
 
-- [ ] **Step 1: Start the proxy**
+- [x] **Step 1: Start the proxy**
 
 ```bash
 cd proxy && npm start
@@ -856,7 +856,7 @@ Expected log output:
 [proxy] model=accounts/fireworks/models/llama-v3p3-70b-instruct  fallback=claude-haiku-4-5-20251001  auth=enabled
 ```
 
-- [ ] **Step 2: Send a test request**
+- [x] **Step 2: Send a test request**
 
 ```bash
 curl -s -X POST http://localhost:8787/v1/chat/completions \
@@ -867,7 +867,7 @@ curl -s -X POST http://localhost:8787/v1/chat/completions \
 
 Expected: JSON response containing `"hello"` in the message content
 
-- [ ] **Step 3: Verify fallback by temporarily breaking the Fireworks key**
+- [x] **Step 3: Verify fallback by temporarily breaking the Fireworks key**
 
 ```bash
 FIREWORKS_API_KEY=bad-key node src/server.js &
@@ -884,7 +884,7 @@ Expected: proxy stderr shows `[provider] Fireworks failed`, response still conta
 kill %1
 ```
 
-- [ ] **Step 4: Commit smoke-test confirmation** *(no code change — this is a manual gate)*
+- [x] **Step 4: Commit smoke-test confirmation** *(no code change — this is a manual gate)*
 
 ```bash
 git tag fireworks-provider-verified
