@@ -15,19 +15,26 @@ export function createProvider(env = process.env) {
     _fireworksFactory = createFireworksProvider,
   } = env;
 
+  const fallbackEnabled = FIREWORKS_FALLBACK_ENABLED !== "false";
+
+  if (FIREWORKS_API_KEY && fallbackEnabled && !ANTHROPIC_API_KEY) {
+    throw new Error("FIREWORKS_FALLBACK_ENABLED requires ANTHROPIC_API_KEY to be set");
+  }
+
   const claude = _anthropicFactory({ apiKey: ANTHROPIC_API_KEY });
 
   if (!FIREWORKS_API_KEY) return claude;
 
   const fireworks = _fireworksFactory({ apiKey: FIREWORKS_API_KEY, model: FIREWORKS_MODEL });
-  const fallbackEnabled = FIREWORKS_FALLBACK_ENABLED !== "false";
 
   return {
     async streamTurn(params, onText) {
+      let emitted = false;
+      const trackedOnText = onText ? (delta) => { emitted = true; onText(delta); } : onText;
       try {
-        return await fireworks.streamTurn(params, onText);
+        return await fireworks.streamTurn(params, trackedOnText);
       } catch (err) {
-        if (!fallbackEnabled) throw err;
+        if (!fallbackEnabled || emitted) throw err;
         console.error(`[provider] Fireworks failed (${err.message}), falling back to Claude`);
         return claude.streamTurn(params, onText);
       }
