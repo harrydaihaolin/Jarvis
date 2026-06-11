@@ -35,7 +35,7 @@
 - Modify: `proxy/src/agent.js` (the `stop === "tool_use"` block, ~lines 150–205)
 - Modify: `proxy/src/agent.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add this test at the end of `proxy/src/agent.test.js` (after the three existing tests):
 
@@ -79,7 +79,7 @@ test("executes two tools from one turn and collects both results", async () => {
 });
 ```
 
-- [ ] **Step 2: Run to confirm it fails**
+- [x] **Step 2: Run to confirm it fails**
 
 ```bash
 cd proxy && node --test src/agent.test.js
@@ -87,7 +87,7 @@ cd proxy && node --test src/agent.test.js
 
 Expected: the new test fails — it works only by coincidence with the current serial loop; confirming the test is wired correctly. The three existing tests should still pass.
 
-- [ ] **Step 3: Replace the serial tool loop with `Promise.all`**
+- [x] **Step 3: Replace the serial tool loop with `Promise.all`**
 
 In `proxy/src/agent.js`, find the `if (stop === "tool_use")` block and replace it entirely:
 
@@ -151,7 +151,7 @@ In `proxy/src/agent.js`, find the `if (stop === "tool_use")` block and replace i
     }
 ```
 
-- [ ] **Step 4: Run tests to confirm all pass**
+- [x] **Step 4: Run tests to confirm all pass**
 
 ```bash
 cd proxy && node --test src/agent.test.js
@@ -159,7 +159,7 @@ cd proxy && node --test src/agent.test.js
 
 Expected: all 4 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add proxy/src/agent.js proxy/src/agent.test.js
@@ -173,7 +173,7 @@ git commit -m "perf(agent): execute multiple tools in parallel with Promise.all"
 **Files:**
 - Modify: `proxy/src/agent.js` (the `AGENT_ADDENDUM` constant, ~lines 9–68)
 
-- [ ] **Step 1: Replace the memory section of `AGENT_ADDENDUM`**
+- [x] **Step 1: Replace the memory section of `AGENT_ADDENDUM`**
 
 Find this block in `AGENT_ADDENDUM`:
 
@@ -198,7 +198,7 @@ Long-term memory (persists across conversations):
 - Memory is your own brain; you don't need to ask permission to read or update it.
 ```
 
-- [ ] **Step 2: Run all proxy tests to confirm nothing broke**
+- [x] **Step 2: Run all proxy tests to confirm nothing broke**
 
 ```bash
 cd proxy && npm test
@@ -206,7 +206,7 @@ cd proxy && npm test
 
 Expected: all tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add proxy/src/agent.js
@@ -221,7 +221,7 @@ git commit -m "refactor(agent): remove memory_recall start instruction — conte
 - Modify: `proxy/src/memory.js`
 - Create: `proxy/src/memory.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `proxy/src/memory.test.js`:
 
@@ -252,7 +252,7 @@ test("appendMemoryBlock trims whitespace from memText", () => {
 });
 ```
 
-- [ ] **Step 2: Run to confirm they fail**
+- [x] **Step 2: Run to confirm they fail**
 
 ```bash
 cd proxy && node --test src/memory.test.js
@@ -260,7 +260,7 @@ cd proxy && node --test src/memory.test.js
 
 Expected: `ERR_MODULE_NOT_FOUND` or named-export error for `appendMemoryBlock`.
 
-- [ ] **Step 3: Add `appendMemoryBlock` to `memory.js`**
+- [x] **Step 3: Add `appendMemoryBlock` to `memory.js`**
 
 Append at the end of `proxy/src/memory.js`:
 
@@ -277,7 +277,7 @@ export function appendMemoryBlock(system, memText) {
 }
 ```
 
-- [ ] **Step 4: Run tests to confirm all pass**
+- [x] **Step 4: Run tests to confirm all pass**
 
 ```bash
 cd proxy && node --test src/memory.test.js
@@ -285,7 +285,7 @@ cd proxy && node --test src/memory.test.js
 
 Expected: all 4 tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add proxy/src/memory.js proxy/src/memory.test.js
@@ -299,7 +299,7 @@ git commit -m "feat(memory): add appendMemoryBlock helper"
 **Files:**
 - Modify: `proxy/src/server.js`
 
-- [ ] **Step 1: Update the import from `memory.js`**
+- [x] **Step 1: Update the import from `memory.js`**
 
 Find the existing import at the top of `proxy/src/server.js`:
 
@@ -313,7 +313,7 @@ Replace with:
 import { resolveStoreId, memoryRecall, appendMemoryBlock } from "./memory.js";
 ```
 
-- [ ] **Step 2: Add memory injection after `resumeOrStart`**
+- [x] **Step 2: Add memory injection after `resumeOrStart`**
 
 In `handleChatCompletions`, find this block (it appears in both streaming and non-streaming paths — there is only one place where `resumeOrStart` is called):
 
@@ -340,7 +340,7 @@ Replace with:
   }
 ```
 
-- [ ] **Step 3: Run all proxy tests**
+- [x] **Step 3: Run all proxy tests**
 
 ```bash
 cd proxy && npm test
@@ -348,7 +348,7 @@ cd proxy && npm test
 
 Expected: all tests pass. (The injection only activates when `agentCfg.memory` is truthy, which is only set in the running server — unit tests don't set it, so there's no live call.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add proxy/src/server.js
@@ -362,7 +362,7 @@ git commit -m "feat(server): pre-inject memory context — skip memory_recall to
 **Files:**
 - Modify: `proxy/src/server.js`
 
-- [ ] **Step 1: Change the heartbeat threshold**
+- [x] **Step 1: Change the heartbeat threshold**
 
 Find:
 
@@ -376,7 +376,7 @@ Replace with:
 const HEARTBEAT_MS = Number.parseInt(process.env.JARVUS_HEARTBEAT_MS || "1500", 10) || 1500;
 ```
 
-- [ ] **Step 2: Change the heartbeat check interval**
+- [x] **Step 2: Change the heartbeat check interval**
 
 Find (inside the streaming path of `handleChatCompletions`):
 
@@ -396,7 +396,7 @@ A few lines up, there is a `setInterval(..., 1000)` call. Change the interval ar
     }, 500);
 ```
 
-- [ ] **Step 3: Run all proxy tests**
+- [x] **Step 3: Run all proxy tests**
 
 ```bash
 cd proxy && npm test
@@ -404,7 +404,7 @@ cd proxy && npm test
 
 Expected: all tests pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add proxy/src/server.js
@@ -419,7 +419,7 @@ git commit -m "perf(server): heartbeat threshold 4500ms → 1500ms, check interv
 - Create: `proxy/src/preamble.js`
 - Create: `proxy/src/preamble.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `proxy/src/preamble.test.js`:
 
@@ -502,7 +502,7 @@ test("skips preamble when preambleProvider is null", async () => {
 });
 ```
 
-- [ ] **Step 2: Run to confirm they fail**
+- [x] **Step 2: Run to confirm they fail**
 
 ```bash
 cd proxy && node --test src/preamble.test.js
@@ -510,7 +510,7 @@ cd proxy && node --test src/preamble.test.js
 
 Expected: `ERR_MODULE_NOT_FOUND` for `./preamble.js`.
 
-- [ ] **Step 3: Create `proxy/src/preamble.js`**
+- [x] **Step 3: Create `proxy/src/preamble.js`**
 
 ```js
 // Decoupled preamble: fires a tiny fast model call to generate a spoken
@@ -570,7 +570,7 @@ export async function runWithPreamble({ preambleProvider, userText, runMain, onT
 }
 ```
 
-- [ ] **Step 4: Run tests to confirm all pass**
+- [x] **Step 4: Run tests to confirm all pass**
 
 ```bash
 cd proxy && node --test src/preamble.test.js
@@ -578,7 +578,7 @@ cd proxy && node --test src/preamble.test.js
 
 Expected: all 4 tests pass.
 
-- [ ] **Step 5: Run all proxy tests together**
+- [x] **Step 5: Run all proxy tests together**
 
 ```bash
 cd proxy && npm test
@@ -586,7 +586,7 @@ cd proxy && npm test
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add proxy/src/preamble.js proxy/src/preamble.test.js
@@ -600,7 +600,7 @@ git commit -m "feat(preamble): add runWithPreamble — concurrent preamble + age
 **Files:**
 - Modify: `proxy/src/server.js`
 
-- [ ] **Step 1: Add preamble imports**
+- [x] **Step 1: Add preamble imports**
 
 At the top of `proxy/src/server.js`, add two new imports after the existing provider imports:
 
@@ -609,7 +609,7 @@ import { createFireworksProvider } from "./providers/fireworks.js";
 import { runWithPreamble } from "./preamble.js";
 ```
 
-- [ ] **Step 2: Add preamble env vars to the `process.env` destructuring**
+- [x] **Step 2: Add preamble env vars to the `process.env` destructuring**
 
 Find the destructuring block (the large `const { ... } = process.env;` near the top). Add two lines after `FIREWORKS_FALLBACK_ENABLED`:
 
@@ -618,7 +618,7 @@ Find the destructuring block (the large `const { ... } = process.env;` near the 
   JARVUS_PREAMBLE_ENABLED = "true",
 ```
 
-- [ ] **Step 3: Create `preambleProvider` at module level**
+- [x] **Step 3: Create `preambleProvider` at module level**
 
 Find the line that creates the main provider:
 
@@ -635,7 +635,7 @@ const preambleProvider =
     : null;
 ```
 
-- [ ] **Step 4: Replace `runAgent` with `runWithPreamble` in the streaming path**
+- [x] **Step 4: Replace `runAgent` with `runWithPreamble` in the streaming path**
 
 Find the inner `try` block of the streaming handler (the one that calls `runAgent`):
 
@@ -690,7 +690,7 @@ Replace with:
     }
 ```
 
-- [ ] **Step 5: Run all proxy tests**
+- [x] **Step 5: Run all proxy tests**
 
 ```bash
 cd proxy && npm test
@@ -698,7 +698,7 @@ cd proxy && npm test
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add proxy/src/server.js
@@ -712,7 +712,7 @@ git commit -m "feat(server): wire runWithPreamble — guaranteed sub-200ms first
 **Files:**
 - Modify: `.env.example`
 
-- [ ] **Step 1: Add preamble vars under the Fireworks section**
+- [x] **Step 1: Add preamble vars under the Fireworks section**
 
 Find:
 
@@ -729,7 +729,7 @@ FIREWORKS_PREAMBLE_MODEL=accounts/fireworks/models/llama-v3p1-8b-instruct
 JARVUS_PREAMBLE_ENABLED=true
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add .env.example
@@ -740,7 +740,7 @@ git commit -m "docs(env): document FIREWORKS_PREAMBLE_MODEL and JARVUS_PREAMBLE_
 
 ## Task 9: Smoke test
 
-- [ ] **Step 1: Start the proxy with Fireworks configured**
+- [x] **Step 1: Start the proxy with Fireworks configured**
 
 ```bash
 cd proxy && npm start
@@ -751,7 +751,7 @@ Expected log line:
 [proxy] model=accounts/fireworks/models/llama-v3p3-70b-instruct  fallback=claude-haiku-4-5-20251001  auth=enabled
 ```
 
-- [ ] **Step 2: Send a streaming request and verify preamble appears first**
+- [x] **Step 2: Send a streaming request and verify preamble appears first**
 
 ```bash
 curl -s -N -X POST http://localhost:8787/v1/chat/completions \
@@ -763,7 +763,7 @@ curl -s -N -X POST http://localhost:8787/v1/chat/completions \
 
 Expected: first content chunk is a short acknowledgment ("On it." / "Sure." / similar), followed by the actual answer.
 
-- [ ] **Step 3: Verify preamble is skipped when disabled**
+- [x] **Step 3: Verify preamble is skipped when disabled**
 
 ```bash
 JARVUS_PREAMBLE_ENABLED=false node src/server.js &
@@ -778,7 +778,7 @@ kill %1
 
 Expected: no preamble chunk, direct model response.
 
-- [ ] **Step 4: Tag**
+- [x] **Step 4: Tag**
 
 ```bash
 git tag conversation-optimization-verified
