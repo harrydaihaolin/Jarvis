@@ -107,3 +107,14 @@ test("buildFinalMessage: mixed text + tool → both in content", () => {
   assert.equal(result.content[0].type, "text");
   assert.equal(result.content[1].type, "tool_use");
 });
+
+test("buildFinalMessage: length finish_reason → max_tokens stop_reason", () => {
+  const result = buildFinalMessage({ text: "truncated", toolCalls: new Map(), finishReason: "length" });
+  assert.equal(result.stop_reason, "max_tokens");
+});
+
+test("buildFinalMessage: infers tool_use when tool calls present despite stop finish_reason", () => {
+  const tc = new Map([[0, { id: "c1", name: "list_dir", arguments: "{}" }]]);
+  const result = buildFinalMessage({ text: "", toolCalls: tc, finishReason: "stop" });
+  assert.equal(result.stop_reason, "tool_use");
+});

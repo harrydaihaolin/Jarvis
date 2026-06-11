@@ -72,10 +72,17 @@ export function buildFinalMessage({ text, toolCalls, finishReason }) {
     try { input = JSON.parse(tc.arguments || "{}"); } catch { /* leave empty */ }
     content.push({ type: "tool_use", id: tc.id, name: tc.name, input });
   }
-  return {
-    stop_reason: finishReason === "tool_calls" ? "tool_use" : "end_turn",
-    content,
-  };
+  let stop_reason;
+  if (toolCalls.size > 0) {
+    stop_reason = "tool_use";
+  } else if (finishReason === "length") {
+    stop_reason = "max_tokens";
+  } else if (finishReason === "tool_calls") {
+    stop_reason = "tool_use";
+  } else {
+    stop_reason = "end_turn";
+  }
+  return { stop_reason, content };
 }
 
 async function* readSSE(readable) {
@@ -91,6 +98,12 @@ async function* readSSE(readable) {
       if (data === "[DONE]") return;
       try { yield JSON.parse(data); } catch { /* skip malformed */ }
     }
+  }
+  if (buf) {
+    if (!buf.startsWith("data: ")) return;
+    const data = buf.slice(6).trim();
+    if (data === "[DONE]") return;
+    try { yield JSON.parse(data); } catch { /* skip malformed */ }
   }
 }
 
@@ -110,48 +123,47 @@ export function createFireworksProvider({ apiKey, model }) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-      let resp;
       try {
-        resp = await fetch(`${FIREWORKS_BASE_URL}/chat/completions`, {
+        const resp = await fetch(`${FIREWORKS_BASE_URL}/chat/completions`, {
           method: "POST",
           headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify(body),
           signal: controller.signal,
         });
+
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => "");
+          throw Object.assign(new Error(`Fireworks ${resp.status}: ${errText}`), { status: resp.status });
+        }
+
+        const acc = { text: "", toolCalls: new Map(), finishReason: null };
+
+        for await (const chunk of readSSE(resp.body)) {
+          const choice = chunk.choices?.[0];
+          if (!choice) continue;
+          const delta = choice.delta ?? {};
+          if (delta.content) {
+            acc.text += delta.content;
+            onText?.(delta.content);
+          }
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              if (!acc.toolCalls.has(tc.index)) {
+                acc.toolCalls.set(tc.index, { id: tc.id ?? "", name: "", arguments: "" });
+              }
+              const entry = acc.toolCalls.get(tc.index);
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.name += tc.function.name;
+              if (tc.function?.arguments) entry.arguments += tc.function.arguments;
+            }
+          }
+          if (choice.finish_reason) acc.finishReason = choice.finish_reason;
+        }
+
+        return buildFinalMessage(acc);
       } finally {
         clearTimeout(timeout);
       }
-
-      if (!resp.ok) {
-        const errText = await resp.text().catch(() => "");
-        throw Object.assign(new Error(`Fireworks ${resp.status}: ${errText}`), { status: resp.status });
-      }
-
-      const acc = { text: "", toolCalls: new Map(), finishReason: null };
-
-      for await (const chunk of readSSE(resp.body)) {
-        const choice = chunk.choices?.[0];
-        if (!choice) continue;
-        const delta = choice.delta ?? {};
-        if (delta.content) {
-          acc.text += delta.content;
-          onText?.(delta.content);
-        }
-        if (delta.tool_calls) {
-          for (const tc of delta.tool_calls) {
-            if (!acc.toolCalls.has(tc.index)) {
-              acc.toolCalls.set(tc.index, { id: tc.id ?? "", name: "", arguments: "" });
-            }
-            const entry = acc.toolCalls.get(tc.index);
-            if (tc.id) entry.id = tc.id;
-            if (tc.function?.name) entry.name += tc.function.name;
-            if (tc.function?.arguments) entry.arguments += tc.function.arguments;
-          }
-        }
-        if (choice.finish_reason) acc.finishReason = choice.finish_reason;
-      }
-
-      return buildFinalMessage(acc);
     },
   };
 }
