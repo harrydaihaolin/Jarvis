@@ -13,6 +13,7 @@ dotenv.config({ path: new URL("../../.env", import.meta.url).pathname });
 
 import Anthropic from "@anthropic-ai/sdk";
 import { runAgent } from "../src/agent.js";
+import { createProvider } from "../src/providers/index.js";
 import { openaiToAnthropic } from "../src/translate.js";
 
 const KEY = process.env.ANTHROPIC_API_KEY;
@@ -21,6 +22,7 @@ if (!KEY) {
   process.exit(2);
 }
 const anthropic = new Anthropic({ apiKey: KEY });
+const provider = createProvider(process.env);
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
 
 // Tool set: web_search on (the thing that triggers a tool turn), no commands/memory.
@@ -50,7 +52,7 @@ async function runTurn(userText) {
   let fullText = "";
   const toolCalls = [];
   await runAgent({
-    anthropic,
+    provider,
     baseParams,
     cfg,
     onText: (d) => { fullText += d; },

@@ -16,6 +16,7 @@ import { runAgent } from "./agent.js";
 import { buildToolDefs } from "./tools/index.js";
 import { addClient, broadcast, clientCount } from "./events.js";
 import { resolveStoreId } from "./memory.js";
+import { createProvider } from "./providers/index.js";
 
 // Load root .env (one level up) so the whole project shares one env file.
 dotenv.config({ path: new URL("../../.env", import.meta.url).pathname });
@@ -38,6 +39,9 @@ const {
   JARVIS_MEMORY_STORE_ID = "",
   NOTION_MCP_URL = "https://mcp.notion.com/mcp",
   NOTION_MCP_TOKEN = "",
+  FIREWORKS_API_KEY = "",
+  FIREWORKS_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+  FIREWORKS_FALLBACK_ENABLED = "true",
   AGENT_NOTION_READONLY = "true",
 } = process.env;
 
@@ -48,6 +52,7 @@ if (!ANTHROPIC_API_KEY) {
 
 const DEFAULT_MAX_TOKENS = Number.parseInt(ANTHROPIC_MAX_TOKENS, 10) || 1024;
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+const provider = createProvider(process.env);
 
 // Spoken filler streamed when the model goes quiet mid-turn, so the user is
 // never met with silence while a tool runs or the model is thinking.
@@ -165,7 +170,7 @@ async function handleChatCompletions(req, res) {
     try {
       let text = "";
       const { finishReason, messages } = await runAgent({
-        anthropic,
+        provider,
         baseParams: params,
         cfg: agentCfg,
         onText: (delta) => {
@@ -214,7 +219,7 @@ async function handleChatCompletions(req, res) {
     let messages;
     try {
       ({ finishReason, messages } = await runAgent({
-        anthropic,
+        provider,
         baseParams: params,
         cfg: agentCfg,
         onText: (delta) => {
@@ -280,7 +285,8 @@ async function start() {
   createServer(app).listen(port, () => {
     const toolNames = buildToolDefs(agentCfg).map((t) => t.name);
     console.log(`[proxy] listening on http://localhost:${port}`);
-    console.log(`[proxy] model=${ANTHROPIC_MODEL}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
+    const primaryModel = FIREWORKS_API_KEY ? FIREWORKS_MODEL : ANTHROPIC_MODEL;
+    console.log(`[proxy] model=${primaryModel}  fallback=${FIREWORKS_API_KEY ? ANTHROPIC_MODEL : "none"}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
     console.log(`[proxy] agent tools: ${toolNames.join(", ")}`);
     console.log(`[proxy] workspace: ${AGENT_WORKSPACE}  commands=${agentCfg.enableCommands ? "enabled" : "disabled"}`);
 
