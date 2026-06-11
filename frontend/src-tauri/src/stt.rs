@@ -16,8 +16,19 @@ pub struct SttState {
     child: Mutex<Option<CommandChild>>,
 }
 
+/// Give up respawning after this many consecutive quick deaths (crash loop).
+const MAX_QUICK_DEATHS: u32 = 5;
+/// A sidecar that lived at least this long resets the crash-loop counter.
+const HEALTHY_LIFETIME_SECS: u64 = 30;
+
 /// Spawn the persistent STT sidecar and forward its stdout JSON to the webview.
 pub fn spawn_stt(app: AppHandle) {
+    spawn_stt_inner(app, 0);
+}
+
+/// Spawn the sidecar; on death, respawn with crash-loop protection. The webview
+/// re-sends `start` when it sees the fresh sidecar's `ready` status.
+fn spawn_stt_inner(app: AppHandle, quick_deaths: u32) {
     let sidecar = match app.shell().sidecar("jarvus-stt") {
         Ok(s) => s,
         Err(e) => {
@@ -36,9 +47,31 @@ pub fn spawn_stt(app: AppHandle) {
     log::info!("[stt] sidecar started");
 
     tauri::async_runtime::spawn(async move {
+        let started = std::time::Instant::now();
         let mut buf = String::new();
         while let Some(event) = rx.recv().await {
             match event {
+                CommandEvent::Terminated(payload) => {
+                    app.state::<SttState>().child.lock().unwrap().take();
+                    let lived = started.elapsed();
+                    let deaths = if lived.as_secs() >= HEALTHY_LIFETIME_SECS { 0 } else { quick_deaths + 1 };
+                    log::warn!(
+                        "[stt] sidecar died (code={:?}, signal={:?}) after {lived:.0?}",
+                        payload.code, payload.signal
+                    );
+                    if deaths >= MAX_QUICK_DEATHS {
+                        log::error!("[stt] sidecar crash-looping — giving up");
+                        let _ = app.emit(
+                            "stt-status",
+                            serde_json::json!({ "state": "error", "detail": "Speech sidecar keeps crashing — voice input disabled." }),
+                        );
+                        return;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    log::info!("[stt] respawning sidecar");
+                    spawn_stt_inner(app, deaths);
+                    return;
+                }
                 CommandEvent::Stdout(bytes) => {
                     buf.push_str(&String::from_utf8_lossy(&bytes));
                     while let Some(i) = buf.find('\n') {

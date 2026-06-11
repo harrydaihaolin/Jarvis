@@ -7,6 +7,7 @@ import { createVoiceOutput } from './voiceOutput'
 import { createChatSession } from './chatSession'
 import { createSpeechChunker } from './speechChunker'
 import { shouldBargeIn, isLikelyEcho, wordsOf } from './bargeIn'
+import { matchWake } from './wakeWord'
 
 // Diagnosis mode: log the voice pipeline (barge-in, finals) to the dev console.
 // On by default; set VITE_DIAGNOSTICS=0 to silence.
@@ -18,19 +19,25 @@ function isTauri() {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
-async function tauriListen<T>(event: string, cb: (payload: T) => void): Promise<() => void> {
+// Subscribe to a Tauri event; returns a synchronous disposer that is safe to
+// call before the underlying async `listen()` resolves. Without this, React
+// StrictMode's mount→cleanup→mount cycle leaks the first listener (cleanup
+// runs before the promise resolves) and every event fires twice.
+function tauriListen<T>(event: string, cb: (payload: T) => void): () => void {
   if (!isTauri()) return () => {}
-  return listen<T>(event, e => cb(e.payload))
+  let disposed = false
+  let unlisten: (() => void) | undefined
+  void listen<T>(event, e => cb(e.payload)).then(fn => {
+    if (disposed) fn()
+    else unlisten = fn
+  })
+  return () => { disposed = true; unlisten?.() }
 }
 
 async function tauriInvoke(cmd: string): Promise<void> {
   if (!isTauri()) return
   try { await invoke(cmd) } catch { /* ignore */ }
 }
-
-// Wake phrase: optional "hey/hi/ok" + "Jarvis" (with common mishears). The text
-// after the match becomes the command, so "Hey Jarvis, what's the weather" works.
-const WAKE_RE = /\b(?:hey\s+|hi\s+|ok\s+)?(jarvis|jarvus|jervis|travis|tarvis|charvis)\b[\s,.:!?-]*/i
 
 // Seconds of silence in a conversation before dropping back to idle (re-arm wake).
 const CONVERSATION_IDLE_MS = 15000
@@ -49,8 +56,14 @@ export default function App() {
   const activeRef = useRef(false)
   const micEnabledRef = useRef(true)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Words Jarvis is currently speaking — used to reject mic echo (no AEC).
+  // Words Jarvis is currently speaking — used to reject mic echo that the
+  // hardware echo cancellation didn't fully remove.
   const spokenWords = useRef<Set<string>>(new Set())
+  // STT finals lag behind the audio (~1-2s silence detection), so echo of
+  // Jarvis's last words can arrive after the turn ends. Until this deadline,
+  // finals matching what Jarvis just said are dropped instead of re-entering
+  // the conversation (the "Jarvis replies to himself" loop).
+  const echoGuardUntil = useRef(0)
 
   const voiceOutput = useMemo(() => createVoiceOutput(), [])
   const chatSession = useMemo(() => createChatSession(), [])
@@ -90,11 +103,13 @@ export default function App() {
   const interrupt = useCallback(() => {
     if (!busyRef.current) return
     if (DIAG) console.warn('[interrupt]')
+    echoGuardUntil.current = Date.now() + 2500
     voiceOutput.cancel()
     chatSession.abort()
     setBusy(false); busyRef.current = false
     setActiveBoth(true); resetIdleTimer()
     setEmotion('listening')
+    if (micEnabledRef.current) void tauriInvoke('stt_resume') // mic was paused while speaking
   }, [voiceOutput, chatSession, setActiveBoth, resetIdleTimer])
 
   // Esc key interrupts (reliable on speakers, no echo issues).
@@ -132,7 +147,10 @@ export default function App() {
     // Mic stays LIVE through the turn (hardware echo cancellation keeps Jarvis
     // from hearing himself) so the user can interrupt at any time.
     const turnDone = () => {
+      echoGuardUntil.current = Date.now() + 2500
       setBusy(false); busyRef.current = false
+      // Reopen the mic now that Jarvis has finished talking.
+      if (micEnabledRef.current) void tauriInvoke('stt_resume')
       if (activeRef.current) { resetIdleTimer(); playChime() } // your turn
       setEmotion('idle')
     }
@@ -150,7 +168,15 @@ export default function App() {
     // Backstop only — the real end is the voice stream draining (onDone below).
     watchdog = setTimeout(finish, 180000)
     const chunker = createSpeechChunker()
-    const stream = voiceOutput.speakStream(() => setEmotion('speaking'), () => finish())
+    // Close the mic the moment audio starts: the built-in mic + speakers can't
+    // run Apple's hardware echo cancellation (the spatial-audio output is
+    // multichannel, which VPIO refuses), so if we keep listening we transcribe
+    // Jarvis's own voice and he replies to himself. The mic stays live during
+    // the thinking phase, and reopens in turnDone()/interrupt().
+    const stream = voiceOutput.speakStream(
+      () => { void tauriInvoke('stt_pause'); setEmotion('speaking') },
+      () => finish(),
+    )
     try {
       const speak = (sentence: string) => {
         for (const w of wordsOf(sentence)) spokenWords.current.add(w)
@@ -190,25 +216,21 @@ export default function App() {
 
   // Picovoice "Jarvis" wake word (if configured) → enter a conversation too.
   useEffect(() => {
-    let dispose: (() => void) | undefined
-    tauriListen<void>('wake-word', () => { setActiveBoth(true); resetIdleTimer() }).then(fn => { dispose = fn })
-    return () => dispose?.()
+    return tauriListen<void>('wake-word', () => { setActiveBoth(true); resetIdleTimer() })
   }, [setActiveBoth, resetIdleTimer])
 
   // Eye tracker → move face eyeballs
   useEffect(() => {
-    let dispose: (() => void) | undefined
-    tauriListen<{ x: number | null; y: number | null }>('face-position', pos => {
+    return tauriListen<{ x: number | null; y: number | null }>('face-position', pos => {
       setEyePos(pos.x != null && pos.y != null ? { x: pos.x, y: pos.y } : null)
-    }).then(fn => { dispose = fn })
-    return () => dispose?.()
+    })
   }, [])
 
   // Speech-to-text events from the always-on macOS Speech sidecar
   useEffect(() => {
     const disposers: Array<() => void> = []
 
-    tauriListen<string>('stt-partial', t => {
+    disposers.push(tauriListen<string>('stt-partial', t => {
       const txt = (t || '').trim()
       if (busyRef.current) {
         // Barge-in: the user is speaking while Jarvis thinks/talks → stop and
@@ -224,27 +246,35 @@ export default function App() {
         return
       }
       if (activeRef.current) { setEmotion('listening'); setInput(txt) }
-    }).then(d => disposers.push(d))
+    }))
 
-    tauriListen<string>('stt-final', raw => {
+    disposers.push(tauriListen<string>('stt-final', raw => {
       const text = (raw || '').trim()
       if (!text) return
       if (DIAG) console.warn('[stt-final]', JSON.stringify(text), 'busy=', busyRef.current, 'active=', activeRef.current)
+      // Echo rejection: while Jarvis speaks (and shortly after — finals lag the
+      // audio), drop transcripts that are mostly his own words.
+      if ((busyRef.current || Date.now() < echoGuardUntil.current) && isLikelyEcho(text, spokenWords.current)) {
+        if (DIAG) console.warn('[stt-final] dropped as echo:', JSON.stringify(text))
+        return
+      }
       if (activeRef.current) {
         void sendTextRef.current(text)
         return
       }
       // Idle: only act if the wake phrase is present.
-      const m = text.match(WAKE_RE)
-      if (!m) return
+      const rest = matchWake(text)
+      if (rest === null) return
       setActiveBoth(true)
       resetIdleTimer()
-      const rest = text.slice((m.index ?? 0) + m[0].length).trim()
       if (rest) void sendTextRef.current(rest)
       else { setEmotion('listening'); playChime() } // woke up, your turn
-    }).then(d => disposers.push(d))
+    }))
 
-    tauriListen<{ state: string; detail: string }>('stt-status', s => {
+    disposers.push(tauriListen<{ state: string; detail: string }>('stt-status', s => {
+      // A fresh sidecar (initial spawn or respawn after a crash) comes up idle;
+      // re-arm it so "Hey Jarvis" keeps working without an app restart.
+      if (s.state === 'ready' && micEnabledRef.current) void tauriInvoke('stt_start')
       if (s.state === 'listening') setSttHint(null)
       if (s.state === 'error' || s.state === 'denied') {
         const d = s.detail || ''
@@ -254,7 +284,7 @@ export default function App() {
             : d || 'Speech recognition is unavailable.',
         )
       }
-    }).then(d => disposers.push(d))
+    }))
 
     return () => disposers.forEach(d => d())
   }, [setActiveBoth, resetIdleTimer, voiceOutput, chatSession, playChime, interrupt])
@@ -285,7 +315,7 @@ export default function App() {
           >
             <JarvisFace emotion={emotion} eyePosition={eyePos} />
           </div>
-          {busy && <div className="jf-interrupt-hint">talk, click, or press Esc to interrupt</div>}
+          {busy && <div className="jf-interrupt-hint">click or press Esc to interrupt</div>}
           <div className="jf-bottom-bar">
             <video ref={videoRef} autoPlay muted playsInline className="jf-cam-preview" />
             <input

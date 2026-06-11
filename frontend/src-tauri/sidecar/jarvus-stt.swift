@@ -28,9 +28,13 @@ final class STT: NSObject {
     private var active = false   // host wants us listening (start..stop)
     private var paused = false   // temporarily suspended (during TTS)
     private var running = false  // a recognition session is currently live
-    // Hardware echo cancellation (lets the user barge in). Off unless JARVUS_AEC=1
-    // — it's a finicky duplex audio unit, so it's opt-in and validated separately.
-    private let useAEC = ProcessInfo.processInfo.environment["JARVUS_AEC"] == "1"
+    private var announcedListening = false // "listening" status sent for this start..stop span
+    // Hardware echo cancellation: Apple's voice-processing I/O subtracts the
+    // Mac's own audio output (Jarvis's TTS) from the mic, so we hear only the
+    // user. On by default — without it Jarvis transcribes himself and replies
+    // to his own speech. Set JARVUS_AEC=0 to disable if it misbehaves. Cleared
+    // at runtime if the audio engine can't start with voice processing on.
+    private var aecEnabled = ProcessInfo.processInfo.environment["JARVUS_AEC"] != "0"
     private var aecConfigured = false
 
     func emit(_ obj: [String: String]) {
@@ -72,36 +76,70 @@ final class STT: NSObject {
         request = req
         lastText = ""
 
-        let input = engine.inputNode
-        if useAEC {
-            if !aecConfigured {
-                do {
-                    try input.setVoiceProcessingEnabled(true)
-                    aecConfigured = true
-                    fputs("[stt] AEC: enabled\n", stderr)
-                } catch {
-                    fputs("[stt] AEC: failed (\(error)) — continuing without\n", stderr)
+        // Start the audio engine once and keep it hot across recognition
+        // sessions — tearing it down on every ~1s "no speech" restart left a
+        // deaf window in which a wake phrase could be clipped.
+        if !engine.isRunning {
+            let input = engine.inputNode
+            if aecEnabled {
+                if !aecConfigured {
+                    do {
+                        // macOS has separate input/output HAL units — voice
+                        // processing must be enabled on BOTH for the duplex
+                        // AEC unit to initialise.
+                        try input.setVoiceProcessingEnabled(true)
+                        try engine.outputNode.setVoiceProcessingEnabled(true)
+                        aecConfigured = true
+                        fputs("[stt] AEC: enabled\n", stderr)
+                    } catch {
+                        fputs("[stt] AEC: failed (\(error)) — continuing without\n", stderr)
+                        aecEnabled = false
+                    }
                 }
+                // The voice-processing I/O unit is duplex: it only renders input audio
+                // if the output chain is also engaged. Touching mainMixerNode creates
+                // the (silent) mainMixer→output connection so the unit runs.
+                _ = engine.mainMixerNode
             }
-            // The voice-processing I/O unit is duplex: it only renders input audio
-            // if the output chain is also engaged. Touching mainMixerNode creates
-            // the (silent) mainMixer→output connection so the unit runs.
-            _ = engine.mainMixerNode
-        }
-        let format = input.outputFormat(forBus: 0)
-        fputs("[stt] capture format: \(format.sampleRate)Hz \(format.channelCount)ch\n", stderr)
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.request?.append(buffer)
-        }
-        engine.prepare()
-        do { try engine.start() } catch {
-            emit(["type": "status", "state": "error", "detail": "audio engine: \(error.localizedDescription)"])
-            return
+            let format = input.outputFormat(forBus: 0)
+            // Multi-mic arrays (e.g. MacBook's 3-mic input) make the voice-
+            // processing unit expose a multichannel format the engine can't
+            // start with (-10875); tap in mono at the same sample rate instead.
+            let tapFormat = format.channelCount > 2
+                ? (AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1) ?? format)
+                : format
+            fputs("[stt] capture format: \(format.sampleRate)Hz \(format.channelCount)ch (tap: \(tapFormat.channelCount)ch)\n", stderr)
+            input.removeTap(onBus: 0)
+            input.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
+                self?.request?.append(buffer)
+            }
+            engine.prepare()
+            do { try engine.start() } catch {
+                if aecConfigured {
+                    // AEC is incompatible with this audio device — drop it and
+                    // retry plain capture rather than losing voice entirely.
+                    fputs("[stt] AEC: engine failed (\(error.localizedDescription)) — retrying without AEC\n", stderr)
+                    input.removeTap(onBus: 0)
+                    try? input.setVoiceProcessingEnabled(false)
+                    try? engine.outputNode.setVoiceProcessingEnabled(false)
+                    aecConfigured = false
+                    aecEnabled = false
+                    request = nil
+                    beginSession(recognizer)
+                    return
+                }
+                emit(["type": "status", "state": "error", "detail": "audio engine: \(error.localizedDescription)"])
+                return
+            }
         }
 
         running = true
-        emit(["type": "status", "state": "listening", "detail": ""])
+        // Only announce the listening→listening restarts once; the host treats
+        // "listening" as a state, and per-second re-emits are just log noise.
+        if !announcedListening {
+            announcedListening = true
+            emit(["type": "status", "state": "listening", "detail": ""])
+        }
 
         task = recognizer.recognitionTask(with: req) { [weak self] result, error in
             guard let self = self else { return }
@@ -112,6 +150,12 @@ final class STT: NSObject {
                 if result.isFinal { self.sessionEnded(emitFinal: true) }
             }
             if let error = error {
+                let ns = error as NSError
+                // kAFAssistantErrorDomain#1110 "No speech detected" is the normal
+                // end of an idle session (~1s of silence) — not worth logging.
+                if !(ns.domain == "kAFAssistantErrorDomain" && ns.code == 1110) {
+                    fputs("[stt] recognition error: \(ns.domain)#\(ns.code): \(ns.localizedDescription)\n", stderr)
+                }
                 // "Siri and Dictation are disabled" surfaces here; report it once.
                 let msg = error.localizedDescription
                 if msg.range(of: "Dictation", options: .caseInsensitive) != nil {
@@ -135,22 +179,26 @@ final class STT: NSObject {
     }
 
     // A session finished (silence, final, or the ~1-min limit). Emit the text,
-    // tear down, then immediately restart so listening is continuous.
+    // then immediately start a fresh session — the audio engine stays hot so
+    // there's no deaf window between sessions.
     private func sessionEnded(emitFinal: Bool) {
         let text = lastText.trimmingCharacters(in: .whitespacesAndNewlines)
-        teardown(emitFinal: false)
+        teardown(emitFinal: false, keepEngine: true)
         if emitFinal, !text.isEmpty { emit(["type": "final", "text": text]) }
         beginIfNeeded()
     }
 
-    private func teardown(emitFinal: Bool) {
+    private func teardown(emitFinal: Bool, keepEngine: Bool = false) {
         silenceTimer?.invalidate(); silenceTimer = nil
-        if running {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-        }
         task?.cancel(); task = nil
         request = nil
+        if !keepEngine {
+            announcedListening = false
+            if engine.isRunning {
+                engine.inputNode.removeTap(onBus: 0)
+                engine.stop()
+            }
+        }
         running = false
         if emitFinal {
             let text = lastText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -158,6 +206,45 @@ final class STT: NSObject {
         }
     }
 }
+
+// ── TCC responsibility disclaim ─────────────────────────────────────────────
+// Child processes inherit their parent's "responsible process" for privacy
+// permissions (TCC). Spawned from the app (or a terminal in dev), speech/mic
+// access is attributed to that host — and if the host's Info.plist lacks
+// NSSpeechRecognitionUsageDescription, TCC SIGABRTs this process the moment
+// it calls SFSpeechRecognizer.requestAuthorization. Re-exec ourselves
+// "disclaimed" (the LLDB/Chromium trick) so this binary is its own
+// responsible process and TCC honours the Info.plist embedded in it.
+func disclaimTCCResponsibility() {
+    if ProcessInfo.processInfo.environment["JARVUS_DISCLAIMED"] == "1" { return }
+    let RTLD_DEFAULT = UnsafeMutableRawPointer(bitPattern: -2)
+    guard let sym = dlsym(RTLD_DEFAULT, "responsibility_spawnattrs_setdisclaim") else { return }
+    typealias SetDisclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+    let setDisclaim = unsafeBitCast(sym, to: SetDisclaim.self)
+
+    var attr: posix_spawnattr_t? = nil
+    guard posix_spawnattr_init(&attr) == 0 else { return }
+    defer { posix_spawnattr_destroy(&attr) }
+    guard setDisclaim(&attr, 1) == 0,
+          posix_spawnattr_setflags(&attr, Int16(POSIX_SPAWN_SETEXEC)) == 0 else { return }
+
+    var argv: [UnsafeMutablePointer<CChar>?] = CommandLine.arguments.map { strdup($0) }
+    argv.append(nil)
+    var env = ProcessInfo.processInfo.environment
+    env["JARVUS_DISCLAIMED"] = "1"
+    var envp: [UnsafeMutablePointer<CChar>?] = env.map { strdup("\($0.key)=\($0.value)") }
+    envp.append(nil)
+
+    var pid: pid_t = 0
+    // POSIX_SPAWN_SETEXEC replaces this process in place (stdio preserved);
+    // on success this call never returns.
+    _ = posix_spawn(&pid, CommandLine.arguments[0], nil, &attr, argv, envp)
+    fputs("[stt] disclaim re-exec failed — continuing undisclaimed\n", stderr)
+    for p in argv where p != nil { free(p) }
+    for p in envp where p != nil { free(p) }
+}
+
+disclaimTCCResponsibility()
 
 let stt = STT()
 stt.emit(["type": "status", "state": "ready", "detail": "send 'start' to listen"])
