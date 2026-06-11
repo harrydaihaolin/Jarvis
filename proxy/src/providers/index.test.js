@@ -121,3 +121,16 @@ test("fallback call uses ANTHROPIC_MODEL instead of the request model", async ()
   await provider.streamTurn({ model: "junk-model", max_tokens: 64, system: [], tools: [], messages: [] }, null);
   assert.equal(claudeModel, "claude-test-model");
 });
+
+test("passes reasoning_effort extraBody to the fireworks factory", () => {
+  let fwArgs = null;
+  createProvider({
+    ANTHROPIC_API_KEY: "ant-key",
+    FIREWORKS_API_KEY: "fw-key",
+    FIREWORKS_MODEL: "m",
+    FIREWORKS_REASONING_EFFORT: "low",
+    _anthropicFactory: () => ({}),
+    _fireworksFactory: (args) => { fwArgs = args; return {}; },
+  });
+  assert.deepEqual(fwArgs.extraBody, { reasoning_effort: "low" });
+});

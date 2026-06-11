@@ -42,7 +42,7 @@ const {
   NOTION_MCP_URL = "https://mcp.notion.com/mcp",
   NOTION_MCP_TOKEN = "",
   FIREWORKS_API_KEY = "",
-  FIREWORKS_MODEL = "accounts/fireworks/models/kimi-k2p5",
+  FIREWORKS_MODEL = "accounts/fireworks/models/gpt-oss-120b",
   FIREWORKS_FALLBACK_ENABLED = "true",
   FIREWORKS_PREAMBLE_MODEL = "accounts/fireworks/models/gpt-oss-120b",
   JARVUS_PREAMBLE_ENABLED = "true",

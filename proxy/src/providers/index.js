@@ -10,7 +10,8 @@ export function createProvider(env = process.env) {
     ANTHROPIC_API_KEY,
     ANTHROPIC_MODEL = "claude-sonnet-4-6",
     FIREWORKS_API_KEY,
-    FIREWORKS_MODEL = "accounts/fireworks/models/kimi-k2p5",
+    FIREWORKS_MODEL = "accounts/fireworks/models/gpt-oss-120b",
+    FIREWORKS_REASONING_EFFORT = "low",
     FIREWORKS_FALLBACK_ENABLED = "true",
     _anthropicFactory = createAnthropicProvider,
     _fireworksFactory = createFireworksProvider,
@@ -26,7 +27,11 @@ export function createProvider(env = process.env) {
 
   if (!FIREWORKS_API_KEY) return claude;
 
-  const fireworks = _fireworksFactory({ apiKey: FIREWORKS_API_KEY, model: FIREWORKS_MODEL });
+  const fireworks = _fireworksFactory({
+    apiKey: FIREWORKS_API_KEY,
+    model: FIREWORKS_MODEL,
+    ...(FIREWORKS_REASONING_EFFORT ? { extraBody: { reasoning_effort: FIREWORKS_REASONING_EFFORT } } : {}),
+  });
 
   return {
     async streamTurn(params, onText) {
