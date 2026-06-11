@@ -1,16 +1,14 @@
 // Per-conversation working memory.
 //
-// Tavus calls our custom LLM statelessly: every turn it POSTs the *spoken*
-// transcript only — never the tool results or drafts the agent built mid-turn.
-// That makes the agent "start fresh" after a confirm step (it asks "save this?",
-// the user says "yes", but the draft is gone). We fix that here by caching the
-// enriched Anthropic message list (tool_use/tool_result blocks + drafts + the
-// final reply) after each turn and restoring it on the next turn.
+// The client POSTs the spoken transcript only — never the tool results or drafts
+// the agent built mid-turn. That makes the agent "start fresh" after a confirm step
+// (it asks "save this?", the user says "yes", but the draft is gone). We fix that
+// by caching the enriched Anthropic message list (tool_use/tool_result blocks +
+// drafts + final reply) after each turn and restoring it on the next turn.
 //
-// The app is single-user/single-call, so a one-slot store is enough. We detect
-// whether an incoming request continues the cached conversation by content —
-// the incoming spoken history must contain the cached turn's last reply — rather
-// than relying on a Tavus-provided id (the request body carries none we can trust).
+// Single-user, so a one-slot store is enough. We detect whether an incoming request
+// continues the cached conversation by content — the incoming history must contain
+// the cached turn's last reply.
 
 import { contentToText, cleanSpokenText } from "./translate.js";
 

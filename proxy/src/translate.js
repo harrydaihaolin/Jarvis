@@ -1,8 +1,4 @@
-// Translation between the OpenAI Chat Completions shape (what Tavus speaks as a
-// "custom LLM") and the Anthropic Messages API (what Claude speaks).
-//
-// Tavus calls POST <base_url>/chat/completions with an OpenAI-style body and
-// expects either a single completion JSON or a stream of SSE chunks.
+// Translation between the OpenAI Chat Completions shape and the Anthropic Messages API.
 
 /** Flatten OpenAI message content (string | array of parts) into plain text. */
 export function contentToText(content) {
@@ -20,24 +16,15 @@ export function contentToText(content) {
   return String(content);
 }
 
-// Tavus's raven perception layer injects metadata into the conversation as
-// user-role blocks (<user_appearance>, <user_audio_analysis>, <user_emotions>,
-// <additional_system_instructions>), and the persona prompt makes the model
-// emit <emotion value="..."/> tags. Those belong on the wire to Tavus, but not
-// in the agent console — strip them so the dialog shows only real spoken words.
-const PERCEPTION_PATTERNS = [
-  /<additional_system_instructions>[\s\S]*?<\/additional_system_instructions>/gi,
-  /<user_appearance>[\s\S]*?<\/user_appearance>/gi,
-  /<user_audio_analysis>[\s\S]*?<\/user_audio_analysis>/gi,
-  /<user_emotions>[\s\S]*?<\/user_emotions>/gi,
+const EMOTION_TAG_PATTERNS = [
   /<emotion\b[^>]*\/?>/gi,
   /<\/emotion>/gi,
 ];
 
-/** Strip Tavus perception/expressiveness metadata, leaving only spoken text. */
+/** Strip <emotion/> tags from agent output, leaving only spoken text. */
 export function cleanSpokenText(raw) {
   let text = contentToText(raw);
-  for (const re of PERCEPTION_PATTERNS) text = text.replace(re, " ");
+  for (const re of EMOTION_TAG_PATTERNS) text = text.replace(re, " ");
   return text
     .replace(/[ \t]+/g, " ")
     .replace(/ *\n */g, "\n")
@@ -45,13 +32,13 @@ export function cleanSpokenText(raw) {
     .trim();
 }
 
-/** Most recent user message that carries real speech (skips perception-only turns). */
+/** Text of the most recent user message. */
 export function lastSpokenUserText(messages) {
   const list = Array.isArray(messages) ? messages : [];
   for (let i = list.length - 1; i >= 0; i--) {
     if (list[i]?.role !== "user") continue;
-    const clean = cleanSpokenText(list[i].content);
-    if (clean) return clean;
+    const text = contentToText(list[i].content).trim();
+    if (text) return text;
   }
   return "";
 }
@@ -101,7 +88,7 @@ export function openaiToAnthropic(body, { defaultModel, defaultMaxTokens }) {
   }));
 
   const params = {
-    model: body.model && !body.model.startsWith("tavus-") ? body.model : defaultModel,
+    model: body.model || defaultModel,
     max_tokens: clampInt(body.max_tokens ?? body.max_completion_tokens, defaultMaxTokens, 1, 8192),
     messages: anthropicMessages,
   };

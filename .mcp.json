@@ -1,9 +1,5 @@
 {
   "mcpServers": {
-    "tavus-docs": {
-      "type": "http",
-      "url": "https://docs.tavus.io/mcp"
-    },
     "notion": {
       "command": "npx",
       "args": ["-y", "@notionhq/notion-mcp-server"],

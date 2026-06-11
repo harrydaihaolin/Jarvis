@@ -49,8 +49,8 @@ if (!ANTHROPIC_API_KEY) {
 const DEFAULT_MAX_TOKENS = Number.parseInt(ANTHROPIC_MAX_TOKENS, 10) || 1024;
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 
-// Spoken filler streamed to Tavus when the model goes quiet mid-turn, so the
-// replica never sits in silence while a tool runs or the model is thinking.
+// Spoken filler streamed when the model goes quiet mid-turn, so the user is
+// never met with silence while a tool runs or the model is thinking.
 const HEARTBEAT_MS = Number.parseInt(process.env.JARVUS_HEARTBEAT_MS || "4500", 10) || 4500;
 const HEARTBEAT_FILLERS = [
   "Still on it, one sec.",
@@ -72,7 +72,6 @@ app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
 // ── Auth ────────────────────────────────────────────────────────────────────
-// Tavus sends the persona's llm.api_key back as `Authorization: Bearer <key>`.
 function authorize(req, res) {
   if (PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY) return true;
   const header = req.get("authorization") || "";
@@ -87,7 +86,7 @@ app.get("/health", (_req, res) => res.json({ status: "ok", model: ANTHROPIC_MODE
 app.get("/", (_req, res) =>
   res.json({
     name: "jarvus-proxy",
-    description: "OpenAI-compatible bridge to the Anthropic Claude API for Tavus CVI.",
+    description: "OpenAI-compatible bridge to the Anthropic Claude API.",
     endpoints: ["/v1/chat/completions", "/v1/models", "/health"],
     model: ANTHROPIC_MODEL,
   }),
@@ -130,7 +129,7 @@ async function handleChatCompletions(req, res) {
   if (!authorize(req, res)) return;
 
   const body = req.body || {};
-  const wantStream = body.stream !== false; // default to streaming (Tavus requires SSE)
+  const wantStream = body.stream !== false;
   const id = `chatcmpl-${randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
 
@@ -146,16 +145,12 @@ async function handleChatCompletions(req, res) {
 
   const model = params.model;
 
-  // Mirror the user's spoken utterance to the agent console — stripping the
-  // Tavus perception metadata (appearance/audio/emotion blocks) so the dialog
-  // shows only real words, not raven's analysis.
+  // Mirror the user's utterance to the agent console.
   const userText = lastSpokenUserText(body.messages);
   if (userText) broadcast({ type: "transcript", role: "user", text: userText });
 
-  // Restore this conversation's working memory (tool results + drafts from prior
-  // turns) so the agent never "starts fresh" after a confirm step. Tavus only
-  // carries spoken text forward; we carry the rest. Falls back to the freshly
-  // translated messages for a brand-new conversation.
+  // Restore working memory (tool results + drafts) so the agent never "starts
+  // fresh" after a confirm step. Falls back to the fresh messages for a new conversation.
   const { messages: runMessages } = resumeOrStart(body.messages, params.messages);
   params = { ...params, messages: runMessages };
 
@@ -187,7 +182,7 @@ async function handleChatCompletions(req, res) {
     }
   }
 
-  // Streaming (SSE) path — this is what Tavus uses.
+  // Streaming (SSE) path.
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache, no-transform",
@@ -202,10 +197,9 @@ async function handleChatCompletions(req, res) {
     send(streamChunk({ id, created, model, delta: { role: "assistant", content: "" } }));
 
     let agentText = "";
-    // Heartbeat: if the model goes quiet (thinking, or a multi-second web_search
-    // is running) for too long, speak a short filler so the replica never sits
-    // in dead air. Filler is streamed to Tavus only — not added to agentText, so
-    // the console transcript and conversation memory stay clean.
+    // Heartbeat: stream a short filler if the model goes quiet (thinking or a
+    // slow tool call), so the user is never met with dead air. Filler is not
+    // added to agentText — the console transcript and memory stay clean.
     let lastActivity = Date.now();
     let fillerIdx = -1;
     const heartbeat = setInterval(() => {
@@ -289,7 +283,7 @@ async function start() {
     console.log(`[proxy] model=${ANTHROPIC_MODEL}  auth=${PROXY_ALLOW_UNAUTHENTICATED === "true" || !PROXY_API_KEY ? "disabled" : "enabled"}`);
     console.log(`[proxy] agent tools: ${toolNames.join(", ")}`);
     console.log(`[proxy] workspace: ${AGENT_WORKSPACE}  commands=${agentCfg.enableCommands ? "enabled" : "disabled"}`);
-    console.log(`[proxy] Tavus custom-LLM base_url should be:  <public-url>/v1`);
+
   });
 }
 

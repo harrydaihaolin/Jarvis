@@ -1,67 +1,47 @@
-# Jarvus — Agent & Contributor Guide
+# Jarvis — Agent & Contributor Guide
 
-**Jarvus** is a real-time **conversational video agent**: a Tavus CVI replica (video avatar +
-STT/TTS + turn-taking) whose "brain" is the **Anthropic Claude API**, wired in through a custom
-OpenAI-compatible LLM proxy. The Tavus persona is a male stock replica named "Jarvus".
-
-## Source of truth
-
-Tavus behavior is governed by the **official Tavus Agent Skill and OpenAPI spec vendored in
-`docs/tavus/`** — do not invent endpoints or field names:
-
-- `docs/tavus/skill.md` — Tavus's own capability guide, workflow, and gotchas. **Read this first.**
-- `docs/tavus/openapi.yaml` — authoritative HTTP API contract (`https://tavusapi.com/v2/`).
-- `docs/tavus/llms.txt` — index of all Tavus doc pages for deeper lookups.
-
-For *live* lookups against current Tavus docs, the official **Tavus docs MCP** is configured in
-`.mcp.json` (`tavus-docs` → `https://docs.tavus.io/mcp`). It is project-scoped, so it must be
-**approved once** in an interactive `claude` session before its tools are callable. The MCP does
-read-only doc retrieval; it does not perform API actions.
+**Jarvis** is a desktop AI agent with an animated face. **Claude is the brain** — it researches
+the web, reads and writes files in a sandboxed workspace, and runs commands with your confirmation.
+An animated robotic face with eye tracking is the interface: say **"Hey Jarvis"** to wake it,
+talk or type, and hear it speak back in a natural local neural voice.
 
 ## Architecture
 
 ```
-Browser (camera+mic)
-   │  WebRTC (Daily)
-   ▼
-Tavus CVI  ──► Perception (raven) ─► Turn-taking (sparrow) ─► STT
-   │                                                            │
-   │   replica video (Phoenix) ◄── TTS ◄── LLM layer ──────────┘
-   │                                         │  (custom, OpenAI-compatible, SSE)
-   │                                         ▼
-   │                              proxy/  /v1/chat/completions
-   │                                         │  Anthropic Messages API
-   │                                         ▼
-   │                                   Claude (your ANTHROPIC_API_KEY)
-   ▼
-frontend/  React + @tavus/cvi-ui  — creates the conversation, renders the call
+[Camera] → [Swift STT sidecar / Wake word] → Tauri "transcript" / "wake-word" event → TextInput
+[Camera] → [Swift Eye-Tracker sidecar]      → Tauri "face-position" event            → JarvisFace eyes
+[TextInput] → POST /v1/chat/completions     → [Local Proxy :8787]                    → Claude API
+[Kokoro TTS :8788]                          → audio output                            → JarvisFace emotion
+[Proxy SSE /events]                         → EventSource                             → AgentConsole
 ```
 
-- **`proxy/`** — the **agent runtime**, exposed as an OpenAI-compatible streaming endpoint so Claude
-  is usable as a Tavus "custom LLM". Tavus's servers call it, so it must be **publicly reachable**
-  (ngrok in dev). Holds `ANTHROPIC_API_KEY`.
-  - `src/translate.js` — OpenAI ↔ Anthropic message mapping (system hoisting, role merge, leading-user).
-  - `src/agent.js` — runs **Claude's tool-use loop** (call → execute tools → feed results → repeat),
-    streams only the final spoken text. Handles `tool_use` and server-tool `pause_turn`. Iteration cap.
-  - `src/tools/index.js` — tool defs + executors; `src/tools/sandbox.js` — workspace + command guard.
-- **`scripts/setup-tavus.mjs`** — creates the persona (pointing `layers.llm.base_url` at the
-  proxy's public URL) and a conversation; prints the `conversation_url`. Auto-detects the ngrok URL.
-- **`frontend/`** — React + `@tavus/cvi-ui`; renders the live video conversation. `src/api.ts`
-  abstracts conversation create/end: Tauri `invoke()` on desktop, `fetch('/api/...')` on web.
-- **`frontend/src-tauri/`** — optional **Tauri v2 desktop app** (Rust). `src/tavus.rs` ports the
-  conversation create/end logic so `TAVUS_API_KEY` stays in Rust; `Info.plist` carries the macOS
-  camera/mic usage strings. The proxy + ngrok are still required (the app is just the client).
+No public tunnel required — everything runs on localhost.
+
+## Codebase layout
+
+| Path | What it does |
+|------|--------------|
+| `proxy/` | **Agent runtime** — Claude's tool-use loop, OpenAI-compatible streaming endpoint. Holds `ANTHROPIC_API_KEY`. |
+| `proxy/src/translate.js` | OpenAI ↔ Anthropic message mapping (system hoisting, role merge, leading-user). |
+| `proxy/src/agent.js` | Runs the Claude tool-use loop; streams spoken text via `onText()`. |
+| `proxy/src/conversation.js` | Per-turn working memory so tool results survive across turns. |
+| `proxy/src/tools/` | Tool defs + executors; `sandbox.js` — workspace + command guard. |
+| `tts/` | Local Kokoro-82M neural TTS server (`server.py`). Run with `./tts/start.sh`. |
+| `frontend/` | React + Tauri desktop app: animated face, voice I/O, agent console. |
+| `frontend/src/components/JarvisFace.tsx` | Animated SVG/CSS face — emotions, blink, speaking ring, eye tracking. |
+| `frontend/src/voiceOutput.ts` | Kokoro TTS client (falls back to Web SpeechSynthesis). |
+| `frontend/src/chatSession.ts` | Streams messages to the proxy; maintains rolling conversation history. |
+| `frontend/src/AgentConsole.tsx` | Live transcript, tool activity, citations, media via proxy SSE `/events`. |
+| `frontend/src-tauri/` | Rust: wake word (Picovoice), STT sidecar (macOS Speech), tray, window. |
 
 ## Agent tools & safety
 
-- Tools: `web_search` (Anthropic **server** tool — no executor, needs Console opt-in), read-only
-  `list_dir`/`read_file`/`search_files`, and mutating `write_file`/`edit_file`/`run_command`.
-- **Confirm-before-acting**: mutating tools require `user_confirmed=true` (the executor refuses
-  otherwise) *and* the system addendum makes the agent ask out loud first. Don't weaken this.
-- **Sandbox**: every path goes through `resolveInWorkspace()` and stays under `AGENT_WORKSPACE`;
-  `run_command` is opt-in (`AGENT_ENABLE_COMMANDS`), denylisted, and run with cwd = workspace.
-- Mutating actions append to `workspace/.agent-audit.log`. The agent loop needs Anthropic credits to
-  run live (no Tavus-hosted equivalent — tools execute in our proxy).
+- **`web_search`** — Anthropic server tool (no executor; needs Console opt-in).
+- **Read-only** (`list_dir`, `read_file`, `search_files`) — auto-execute.
+- **Mutating** (`write_file`, `edit_file`, `run_command`) — require `user_confirmed: true`; audited.
+- **Sandbox**: every path goes through `resolveInWorkspace()` and stays under `AGENT_WORKSPACE`.
+- `run_command` is opt-in via `AGENT_ENABLE_COMMANDS=true`, deny-listed, and workspace-cwd.
+- Mutating actions append to `workspace/.agent-audit.log`.
 
 ## Notion notes
 
@@ -79,55 +59,42 @@ When the user says "read notes from Notion", "look up [X] in Notion", or "find m
 3. Summarise the content into the conversation.
 
 The Notion MCP server is configured in `.mcp.json` (`notion` → `@notionhq/notion-mcp-server`,
-reads `NOTION_TOKEN`). It is project-scoped, so it must be **approved once** in an interactive
-session. The **Jarvus Notes** database lives under the user's "Jarvus" Notion page; its id is in
-`NOTION_DATABASE_ID`. Schema: `Name` (Title, `YYYY-MM-DD — <topic>`), `Date` (Date, today),
-`Topic` (Select, inferred from context).
+reads `NOTION_TOKEN`). It must be **approved once** in an interactive session. The **Jarvis Notes**
+database lives under the user's "Jarvis" Notion page; its id is in `NOTION_DATABASE_ID`.
+Schema: `Name` (Title, `YYYY-MM-DD — <topic>`), `Date` (Date, today), `Topic` (Select).
 
-## Two ways to "use Claude" (decided: Option B)
+## Hard rules
 
-- **Option A — Tavus-hosted Claude:** set `layers.llm.model = "tavus-claude-haiku-4.5"` and omit
-  `base_url`/`api_key`. No proxy needed. **Chat only — cannot run our server-side tools**, so the
-  agent capabilities below are unavailable in this mode. Toggle via `USE_TAVUS_HOSTED_LLM=true`.
-- **Option B — Custom proxy (required for the agent):** your Anthropic key + any model (Opus 4.8,
-  Sonnet 4.6), full control of prompt/tools/context. The proxy runs the tool-use loop.
-
-## Hard rules (from skill.md "Common Gotchas" + "Verification Checklist")
-
-- **Never put `TAVUS_API_KEY` or `ANTHROPIC_API_KEY` in client/browser code.** Keys are server-side
-  only. The frontend gets a `conversation_url` from a backend route, never the raw key.
-- Tavus auth header is **`x-api-key`** (not `Authorization`). The proxy, being OpenAI-compatible,
-  receives `Authorization: Bearer <key>` from Tavus.
-- Custom LLM endpoint **must stream (SSE)** and be OpenAI-compatible. `base_url` must **not** include
-  the `/chat/completions` route extension (Tavus appends it). Use `.../v1`.
-- Conversations **start billing when created** (replica joins the room). Use `test_mode: true` to
-  validate without billing, and always call `POST /v2/conversations/{id}/end` when done.
-- Keep the system prompt under ~5,000 tokens for latency/quality.
-- `speculative_inference` defaults to `true` — keep it on for responsiveness.
+- **Never put `ANTHROPIC_API_KEY` in client/browser code.** It is server-side only (proxy).
+- The proxy auth header is `Authorization: Bearer <PROXY_API_KEY>` (OpenAI convention).
+- Keep the agent system prompt under ~5,000 tokens for latency/quality.
 
 ## CI and the feedback loop
 
 After you push or update a PR, monitor CI check results (`.github/workflows/ci.yml`). Treat
-failing checks as signal to act on, not noise. When CI fails, read the logs, fix the root cause,
-and push follow-up commits. Do not declare the task done while checks are red.
+failing checks as signal to act on. When CI fails, read the logs, fix the root cause, and push
+follow-up commits. Do not declare the task done while checks are red.
 
-Verify CI status with: `gh pr checks` or check the Actions tab on the PR.
+Verify CI status with: `gh pr checks` or the Actions tab on the PR.
 
 ## Common commands
 
 ```bash
-# 1. Proxy (Claude brain) — local
-cd proxy && npm install && npm run dev          # http://localhost:8787
+# 1. Proxy (Claude brain)
+cd proxy && npm start                          # http://localhost:8787
 
-# Or dockerized + ngrok tunnel (proxy must be public for Tavus to reach it)
-docker compose up --build                       # proxy:8787 + ngrok (UI on :4040)
+# 2. Kokoro TTS (local voice)
+./tts/start.sh                                 # http://localhost:8788  (run setup.sh once first)
 
-# 2. Create persona + conversation (auto-detects ngrok public URL)
-node scripts/setup-tavus.mjs                     # prints conversation_url
+# 3. Desktop app
+cd frontend
+set -a && . ../.env && set +a
+PATH="$HOME/.cargo/bin:$PATH" npm run tauri:dev:voice   # voice input + STT
+# or: tauri:dev (face only) · tauri:dev:wake (+ wake word) · tauri:dev:full (+ eye tracking)
 
-# 3. Frontend
-cd frontend && npm install && npm run dev        # http://localhost:5173
+# Tests
+cd frontend && npm test                        # vitest — voiceOutput, chatSession, speechChunker, bargeIn
+cd proxy && npm test                           # node --test — translate, agent, conversation
 ```
 
-Environment is configured via the root `.env` (copy from `.env.example`). The proxy, setup script,
-and frontend each read the variables they need.
+Environment is configured via the root `.env` (copy from `.env.example`).

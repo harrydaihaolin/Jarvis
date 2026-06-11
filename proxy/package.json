@@ -1,9 +1,9 @@
 {
-  "name": "tavus-agent-proxy",
+  "name": "jarvis-proxy",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "OpenAI-compatible proxy that lets Tavus CVI use the Anthropic Claude API as a custom LLM.",
+  "description": "OpenAI-compatible proxy that runs the Claude agent loop for Jarvis.",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",

@@ -48,11 +48,11 @@ test("forces conversation to start with a user turn", () => {
   assert.equal(out.messages[1].role, "assistant");
 });
 
-test("ignores Tavus pseudo-model names and falls back to default", () => {
-  const out = openaiToAnthropic({ model: "tavus-claude-haiku-4.5", messages: [{ role: "user", content: "x" }] }, opts);
-  assert.equal(out.model, "claude-sonnet-4-6");
-  const out2 = openaiToAnthropic({ model: "claude-opus-4-8", messages: [{ role: "user", content: "x" }] }, opts);
-  assert.equal(out2.model, "claude-opus-4-8");
+test("passes model through; falls back to default when absent", () => {
+  const out = openaiToAnthropic({ model: "claude-opus-4-7", messages: [{ role: "user", content: "x" }] }, opts);
+  assert.equal(out.model, "claude-opus-4-7");
+  const out2 = openaiToAnthropic({ messages: [{ role: "user", content: "x" }] }, opts);
+  assert.equal(out2.model, "claude-sonnet-4-6");
 });
 
 test("clamps max_tokens", () => {
@@ -66,21 +66,6 @@ test("mapFinishReason maps anthropic stop reasons", () => {
   assert.equal(mapFinishReason("max_tokens"), "length");
 });
 
-test("cleanSpokenText strips a user_audio_analysis prefix, keeping the speech", () => {
-  const raw =
-    "<user_audio_analysis>\nThe speaker sounds bored and slightly annoyed.\n</user_audio_analysis>\nBanana telephone, what is two plus two?";
-  assert.equal(cleanSpokenText(raw), "Banana telephone, what is two plus two?");
-});
-
-test("cleanSpokenText drops pure perception/instruction blocks", () => {
-  assert.equal(
-    cleanSpokenText("<additional_system_instructions><user_appearance>\nAn Asian male in his 30s.\n</user_appearance></additional_system_instructions>"),
-    "",
-  );
-  assert.equal(cleanSpokenText("<additional_system_instructions>respond in english</additional_system_instructions>"), "");
-  assert.equal(cleanSpokenText("<user_emotions>\nappears contemplative\n</user_emotions>"), "");
-});
-
 test("cleanSpokenText removes inline <emotion> tags from assistant text", () => {
   assert.equal(
     cleanSpokenText('<emotion value="excited"/> Sure thing.<emotion value="neutral"/> Two plus two is four!'),
@@ -92,12 +77,11 @@ test("cleanSpokenText passes through plain speech unchanged", () => {
   assert.equal(cleanSpokenText("Hey, how are you?"), "Hey, how are you?");
 });
 
-test("lastSpokenUserText returns the latest real utterance, skipping perception-only turns", () => {
+test("lastSpokenUserText returns the latest user message text", () => {
   const messages = [
     { role: "user", content: "Hey, how are you?" },
     { role: "assistant", content: "Doing great!" },
-    { role: "user", content: "<additional_system_instructions>respond in english</additional_system_instructions>" },
-    { role: "user", content: "<user_audio_analysis>\ndry tone\n</user_audio_analysis>\nSummarize this for me." },
+    { role: "user", content: "Summarize this for me." },
   ];
   assert.equal(lastSpokenUserText(messages), "Summarize this for me.");
 });

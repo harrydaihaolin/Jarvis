@@ -1,6 +1,5 @@
 // The agent runtime: runs Claude's tool-use loop server-side and streams the
-// final spoken text out via onText(). Tavus sees one continuous streaming
-// completion; the tool round-trips happen invisibly within the turn.
+// final spoken text out via onText(). Tool round-trips happen invisibly within the turn.
 
 import { buildToolDefs, executeTool } from "./tools/index.js";
 import { memoryRecall, memoryRead, memorySave } from "./memory.js";
