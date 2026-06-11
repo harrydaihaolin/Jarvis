@@ -48,7 +48,7 @@ class AgentState(TypedDict):
 
 ### Domain subgraphs
 
-Each is a `create_react_agent` ReAct loop with its own tool set. Uses a faster/cheaper model (Haiku or Fireworks Llama-3-8b) — narrower job, less reasoning required.
+Each is a `create_react_agent` ReAct loop with its own tool set. Uses `claude-haiku-4-5` (when on Anthropic) or `accounts/fireworks/models/llama-v3p1-8b-instruct` (when on Fireworks) — narrower job, less reasoning required.
 
 ### Checkpointing
 
