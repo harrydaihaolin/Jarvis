@@ -40,7 +40,7 @@ const {
   NOTION_MCP_URL = "https://mcp.notion.com/mcp",
   NOTION_MCP_TOKEN = "",
   FIREWORKS_API_KEY = "",
-  FIREWORKS_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+  FIREWORKS_MODEL = "accounts/fireworks/models/kimi-k2p5",
   FIREWORKS_FALLBACK_ENABLED = "true",
   AGENT_NOTION_READONLY = "true",
 } = process.env;

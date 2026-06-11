@@ -102,3 +102,22 @@ test("throws at creation when fallback enabled without ANTHROPIC_API_KEY", () =>
     /requires ANTHROPIC_API_KEY/
   );
 });
+
+test("fallback call uses ANTHROPIC_MODEL instead of the request model", async () => {
+  let claudeModel = null;
+  const env = {
+    ANTHROPIC_API_KEY: "ant-key",
+    ANTHROPIC_MODEL: "claude-test-model",
+    FIREWORKS_API_KEY: "fw-key",
+    FIREWORKS_FALLBACK_ENABLED: "true",
+    _anthropicFactory: () => ({
+      async streamTurn(params) { claudeModel = params.model; return { stop_reason: "end_turn", content: [] }; },
+    }),
+    _fireworksFactory: () => ({
+      async streamTurn() { throw Object.assign(new Error("503"), { status: 503 }); },
+    }),
+  };
+  const provider = createProvider(env);
+  await provider.streamTurn({ model: "junk-model", max_tokens: 64, system: [], tools: [], messages: [] }, null);
+  assert.equal(claudeModel, "claude-test-model");
+});

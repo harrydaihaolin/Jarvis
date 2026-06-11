@@ -8,8 +8,9 @@ import { createFireworksProvider } from "./fireworks.js";
 export function createProvider(env = process.env) {
   const {
     ANTHROPIC_API_KEY,
+    ANTHROPIC_MODEL = "claude-sonnet-4-6",
     FIREWORKS_API_KEY,
-    FIREWORKS_MODEL = "accounts/fireworks/models/llama-v3p3-70b-instruct",
+    FIREWORKS_MODEL = "accounts/fireworks/models/kimi-k2p5",
     FIREWORKS_FALLBACK_ENABLED = "true",
     _anthropicFactory = createAnthropicProvider,
     _fireworksFactory = createFireworksProvider,
@@ -36,7 +37,7 @@ export function createProvider(env = process.env) {
       } catch (err) {
         if (!fallbackEnabled || emitted) throw err;
         console.error(`[provider] Fireworks failed (${err.message}), falling back to Claude`);
-        return claude.streamTurn(params, onText);
+        return claude.streamTurn({ ...params, model: ANTHROPIC_MODEL }, onText);
       }
     },
   };
