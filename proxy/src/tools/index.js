@@ -137,7 +137,7 @@ export function buildToolDefs(cfg) {
       {
         name: "memory_recall",
         description:
-          "Search your long-term memory, which PERSISTS ACROSS CONVERSATIONS. Call this at the start of a conversation to recall who the user is, their preferences, and prior context. Optionally pass a query to filter.",
+          "Search long-term memory mid-conversation for specific details not already in the injected <memory> block — preferences, projects, or prior context that persists across conversations. Optionally pass a query to filter.",
         input_schema: {
           type: "object",
           properties: { query: { type: "string", description: "Optional substring to filter memories by." } },

@@ -15,7 +15,7 @@ import { resumeOrStart, rememberTurn } from "./conversation.js";
 import { runAgent } from "./agent.js";
 import { buildToolDefs } from "./tools/index.js";
 import { addClient, broadcast, clientCount } from "./events.js";
-import { resolveStoreId } from "./memory.js";
+import { resolveStoreId, memoryRecall, appendMemoryBlock } from "./memory.js";
 import { createProvider } from "./providers/index.js";
 
 // Load root .env (one level up) so the whole project shares one env file.
@@ -156,8 +156,19 @@ async function handleChatCompletions(req, res) {
 
   // Restore working memory (tool results + drafts) so the agent never "starts
   // fresh" after a confirm step. Falls back to the fresh messages for a new conversation.
-  const { messages: runMessages } = resumeOrStart(body.messages, params.messages);
+  const { messages: runMessages, resumed } = resumeOrStart(body.messages, params.messages);
   params = { ...params, messages: runMessages };
+
+  // Pre-inject long-term memory into the system prompt on fresh conversations,
+  // so the agent can greet the user with context without burning a tool round-trip.
+  if (!resumed && agentCfg.memory) {
+    try {
+      const memText = await memoryRecall(agentCfg.memory.anthropic, agentCfg.memory.storeId, "");
+      params = { ...params, system: appendMemoryBlock(params.system || "", memText) };
+    } catch (err) {
+      console.warn(`[proxy] memory injection failed: ${err.message}`);
+    }
+  }
 
   // Forward structured agent steps to the console (and log them).
   const onEvent = (evt) => {
